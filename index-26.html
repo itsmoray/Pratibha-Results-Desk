@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pratibha Results Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --ink:#16213A; --ink2:#243352; --paper:#F2F4F7; --card:#fff; --line:#DCE1E8;
+  --muted:#5B6678; --gold:#E8A317; --gold-soft:#FCF1D6; --teal:#0F766E; --teal-soft:#DDF3EF;
+  --danger:#B42318; --danger-soft:#FDE8E6;
+  --head:'Bricolage Grotesque',system-ui,sans-serif; --body:'Figtree',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 var(--body)}
+h1,h2,h3{font-family:var(--head);margin:0;line-height:1.15}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* login */
+.login{min-height:100dvh;display:grid;place-items:center;padding:20px;background:var(--ink)}
+.login-box{width:100%;max-width:380px;background:var(--card);border-radius:14px;padding:28px 24px}
+.login-box h1{font-size:30px;font-weight:800}
+.login-box p{color:var(--muted);margin:6px 0 20px}
+
+/* fields */
+label{display:block;font-weight:600;font-size:14px;margin:0 0 12px}
+input,select,textarea{display:block;width:100%;margin-top:5px;padding:11px 12px;border:1.5px solid var(--line);border-radius:8px;background:#fff;font-weight:400}
+input:focus,select:focus,textarea:focus{border-color:var(--ink);outline:none}
+fieldset{border:1.5px solid var(--line);border-radius:10px;margin:0 0 12px;padding:6px 12px 12px}
+legend{font-family:var(--head);font-weight:600;padding:0 6px}
+fieldset input{margin-top:8px}
+.err{color:var(--danger);background:var(--danger-soft);border-radius:8px;padding:9px 12px;margin:0 0 12px;font-size:14px}
+
+/* buttons */
+.btn{border:0;border-radius:8px;padding:11px 16px;font-weight:600;background:var(--ink);color:#fff}
+.btn:disabled{opacity:.6;cursor:wait}
+.btn.gold{background:var(--gold);color:var(--ink)}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.btn.danger{background:var(--danger)}
+.btn.small{padding:7px 11px;font-size:14px}
+.btn.block{width:100%}
+
+/* header + progress */
+.top{background:var(--ink);color:#fff;padding:12px 16px 14px}
+.top-row{display:flex;align-items:center;gap:10px;max-width:960px;margin:0 auto}
+.brand{font-family:var(--head);font-weight:800;font-size:20px;flex:1}
+.who{font-size:13px;opacity:.85;text-align:right;line-height:1.25}
+.top .btn{background:var(--ink2);padding:7px 11px;font-size:14px}
+.prog{max-width:960px;margin:12px auto 0}
+.prog-label{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px}
+.prog-label b{font-family:var(--head);font-size:18px}
+.strip{display:flex;gap:2px;height:12px}
+.strip i{flex:1;background:var(--ink2);border-radius:2px}
+.strip i.on{background:var(--gold)}
+
+/* tabs */
+.tabs{display:flex;gap:4px;overflow-x:auto;background:#fff;border-bottom:1px solid var(--line);padding:0 8px;position:sticky;top:0;z-index:5}
+.tabs button{border:0;background:none;padding:14px 14px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--gold)}
+main{max-width:960px;margin:0 auto;padding:16px}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.controls input{margin:0;flex:1;min-width:180px}
+.chips{display:flex;gap:6px}
+.chip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:7px 13px;font-size:14px;font-weight:600}
+.chip[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* lists */
+.list{display:grid;gap:10px}
+@media(min-width:720px){.list{grid-template-columns:1fr 1fr}}
+.item{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:left;width:100%;display:block}
+button.item:hover{border-color:var(--ink)}
+.item h3{font-size:18px;font-weight:600}
+.meta{color:var(--muted);font-size:14px;margin-top:3px}
+.row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.pill{font-size:12.5px;font-weight:600;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.pill.done{background:var(--teal-soft);color:var(--teal)}
+.pill.wait{background:var(--gold-soft);color:#8A5B00}
+.pill.off{background:var(--danger-soft);color:var(--danger)}
+.win{margin:10px 0 0;padding:0;list-style:none;font-size:15px}
+.win li{display:flex;gap:8px;padding:3px 0;border-top:1px solid var(--line)}
+.win li:first-child{border-top:0}
+.win .pl{flex:0 0 76px;color:var(--muted);font-weight:600;font-size:14px}
+.win .n{font-weight:600}
+.win small{color:var(--muted);display:block;font-weight:400}
+.note{font-size:14px;color:var(--muted);margin-top:8px}
+.empty{background:#fff;border:1.5px dashed var(--line);border-radius:12px;padding:26px 18px;text-align:center;color:var(--muted)}
+.waiting{font-size:14px;color:var(--muted);margin-top:16px}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+
+/* dialog */
+dialog{border:0;border-radius:14px;padding:22px 20px;width:calc(100% - 24px);max-width:480px;max-height:92dvh;overflow:auto}
+dialog::backdrop{background:rgba(22,33,58,.6)}
+dialog h2{font-size:22px}
+.sub{color:var(--muted);margin:4px 0 16px}
+.checks{max-height:200px;overflow:auto;border:1.5px solid var(--line);border-radius:8px;padding:6px 10px;margin-top:5px}
+.checks label{display:flex;gap:10px;align-items:center;font-weight:400;margin:0;padding:6px 0}
+.checks input{width:auto;margin:0}
+.inline{display:flex;gap:8px}
+.inline input{flex:1}
+
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 16px;border-radius:10px;z-index:99;max-width:90%;font-weight:500}
+#toast.bad{background:var(--danger)}
+@media(prefers-reduced-motion:no-preference){.strip i{transition:background .4s}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<section class="login" id="login">
+  <form class="login-box" id="loginForm">
+    <h1>Pratibha Results Desk</h1>
+    <p>Sign in to enter or view event results.</p>
+    <div class="err" id="loginErr" hidden></div>
+    <label>Username <input id="lu" autocomplete="username" autocapitalize="none" required></label>
+    <label>Password <input id="lp" type="password" autocomplete="current-password" required></label>
+    <button class="btn gold block" id="lbtn">Sign in</button>
+  </form>
+</section>
+
+<!-- APP -->
+<div id="app" hidden>
+  <header class="top">
+    <div class="top-row">
+      <div class="brand">Pratibha Results</div>
+      <div class="who" id="who"></div>
+      <button class="btn" onclick="openPassword()">Password</button>
+      <button class="btn" onclick="logout()">Sign out</button>
+    </div>
+    <div class="prog">
+      <div class="prog-label"><span><b id="pn">0</b> of <span id="pt">0</span> events declared</span><span id="pl"></span></div>
+      <div class="strip" id="strip" aria-hidden="true"></div>
+    </div>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <main id="view"></main>
+</div>
+
+<dialog id="dlg"></dialog>
+<div id="toast" hidden></div>
+
+<script>
+/* ====== CONFIG ====== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbwXZfCpI8nqu6qrWPVbdcbvQsfTmj8de-UhBTm9Wr7nTC-6S7nCoP2Q-Chyui2AcjDM/exec';
+const POLL_MS = 15000;
+
+/* ====== STATE + HELPERS ====== */
+const S = { token:'', me:null, events:[], results:{}, users:[], tab:'', filter:'all', q:'' };
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store = {
+  get(k){ try{ return localStorage.getItem(k) }catch(e){ return null } },
+  set(k,v){ try{ localStorage.setItem(k,v) }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k) }catch(e){} }
+};
+
+let toastT;
+function toast(msg, bad){
+  const t = $('#toast'); t.textContent = msg; t.className = bad ? 'bad' : ''; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3200);
+}
+
+async function api(action, payload = {}){
+  if (API_URL.startsWith('PASTE')) throw new Error('Set API_URL in index.html first');
+  let res;
+  try {
+    res = await fetch(API_URL, { method:'POST', redirect:'follow', body: JSON.stringify({ action, token:S.token, ...payload }) });
+  } catch(e){ throw new Error('No connection. Check your internet and try again.'); }
+  let j;
+  try { j = await res.json(); } catch(e){ throw new Error('Server sent an unexpected reply. Check the web app deployment.'); }
+  if (!j.ok){
+    if (j.code === 'AUTH'){ endSession(); }
+    throw new Error(j.error || 'Something went wrong');
+  }
+  return j;
+}
+
+function fmtTime(iso){
+  if (!iso) return '';
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const t = d.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+  return d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString([], { day:'numeric', month:'short' }) + ', ' + t;
+}
+const isDone = id => !!(S.results[id] && S.results[id].p1);
+const role = () => S.me ? S.me.role : '';
+const dlg = $('#dlg');
+function openDlg(html){ dlg.innerHTML = html; if (!dlg.open) dlg.showModal(); }
+function closeDlg(){ if (dlg.open) dlg.close(); }
+
+/* ====== AUTH ====== */
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const b = $('#lbtn'), er = $('#loginErr'); er.hidden = true; b.disabled = true; b.textContent = 'Signing in…';
+  try {
+    const j = await api('login', { username:$('#lu').value, password:$('#lp').value });
+    S.token = j.token; store.set('prt_token', j.token); $('#lp').value = '';
+    await startApp();
+  } catch(err){ er.textContent = err.message; er.hidden = false; }
+  b.disabled = false; b.textContent = 'Sign in';
+});
+
+function endSession(){
+  S.token = ''; S.me = null; store.del('prt_token'); clearInterval(pollT);
+  closeDlg(); $('#app').hidden = true; $('#login').hidden = false;
+}
+async function logout(){ try{ await api('logout'); }catch(e){} endSession(); }
+
+let pollT;
+async function startApp(){
+  await refresh(true);
+  $('#login').hidden = true; $('#app').hidden = false;
+  $('#who').innerHTML = esc(S.me.name) + '<br>' + esc(S.me.role);
+  buildTabs();
+  clearInterval(pollT);
+  pollT = setInterval(() => { if (!document.hidden && !dlg.open) refresh(); }, POLL_MS);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.token && !dlg.open) refresh(); });
+
+async function refresh(first){
+  const j = await api('data');
+  S.me = j.me; S.events = j.events; S.results = j.results;
+  if (!first){ paintProgress(); paint(); } else paintProgress();
+}
+
+/* ====== PROGRESS ====== */
+function paintProgress(){
+  const total = S.events.length, done = S.events.filter(e => isDone(e.id)).length;
+  $('#pn').textContent = done; $('#pt').textContent = total;
+  $('#pl').textContent = total ? Math.round(done * 100 / total) + '%' : '';
+  $('#strip').innerHTML = S.events.map(e => `<i class="${isDone(e.id) ? 'on' : ''}"></i>`).join('');
+}
+
+/* ====== TABS ====== */
+function tabsFor(){
+  const t = [];
+  if (role() === 'admin' || role() === 'faculty') t.push(['enter', role() === 'admin' ? 'All events' : 'My events']);
+  t.push(['board', 'Results']);
+  if (role() === 'admin'){ t.push(['users', 'Users']); t.push(['manage', 'Manage events']); }
+  return t;
+}
+function buildTabs(){
+  const t = tabsFor();
+  $('#tabs').innerHTML = t.map(([k,l]) => `<button role="tab" data-k="${k}" onclick="setTab('${k}')">${l}</button>`).join('');
+  setTab(t[0][0]);
+}
+async function setTab(k){
+  S.tab = k; S.filter = 'all'; S.q = '';
+  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
+  const v = $('#view');
+  if (k === 'enter'){
+    v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search events" oninput="S.q=this.value;paint()">
+      <div class="chips">${['all','pending','declared'].map(f => `<button class="chip" data-f="${f}" aria-pressed="${f==='all'}" onclick="setFilter('${f}')">${f[0].toUpperCase()+f.slice(1)}</button>`).join('')}</div></div><div id="list" class="list"></div>`;
+  } else if (k === 'board'){
+    const canX = role() === 'admin' || role() === 'committee';
+    v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search declared results" oninput="S.q=this.value;paint()">
+      ${canX ? '<button class="btn gold" onclick="exportXlsx()">Download Excel</button>' : ''}</div><div id="list" class="list"></div><p class="waiting" id="waiting"></p>`;
+  } else if (k === 'users'){
+    v.innerHTML = `<div class="bar"><button class="btn gold" onclick="openUser()">Add user</button></div><div id="list" class="list"></div>`;
+    try { S.users = (await api('listUsers')).users; } catch(e){ toast(e.message, true); }
+  } else if (k === 'manage'){
+    v.innerHTML = `<div class="item" style="margin-bottom:14px"><h3>Add events</h3>
+      <p class="meta">One event per line. Optional details after a bar: Name | Category | Venue</p>
+      <textarea id="bulk" rows="6" placeholder="Group Song | Music | Main Auditorium&#10;Elocution English | Literary | Seminar Hall"></textarea>
+      <div class="actions"><button class="btn gold" id="addBtn" onclick="addEvents()">Add events</button></div></div>
+      <div class="controls"><input id="q" type="search" placeholder="Search events" oninput="S.q=this.value;paint()"></div><div id="list" class="list"></div>`;
+  }
+  paint();
+}
+function setFilter(f){
+  S.filter = f;
+  document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.f === f));
+  paint();
+}
+
+/* ====== PAINT ====== */
+function match(e){ const q = S.q.trim().toLowerCase(); return !q || (e.name + ' ' + e.category + ' ' + e.venue).toLowerCase().includes(q); }
+
+function paint(){
+  const L = $('#list'); if (!L) return;
+  if (S.tab === 'enter'){
+    const list = S.events.filter(e => e.canEdit && match(e) &&
+      (S.filter === 'all' || (S.filter === 'declared') === isDone(e.id)));
+    if (!list.length){
+      const none = !S.events.some(e => e.canEdit);
+      L.innerHTML = `<div class="empty">${none ? 'No events are assigned to you yet. Ask the admin to assign your events.' : 'No events match.'}</div>`; return;
+    }
+    L.innerHTML = list.map(e => {
+      const r = S.results[e.id];
+      return `<button class="item" onclick="openEditor('${e.id}')"><div class="row"><h3>${esc(e.name)}</h3>
+        <span class="pill ${r ? 'done' : 'wait'}">${r ? 'Declared' : 'Pending'}</span></div>
+        <div class="meta">${esc([e.category, e.venue].filter(Boolean).join(', '))}</div>
+        ${r ? `<div class="meta">1st: ${esc(r.p1)}</div>` : ''}</button>`;
+    }).join('');
+  }
+  else if (S.tab === 'board'){
+    const list = S.events.filter(e => isDone(e.id) && match(e))
+      .sort((a,b) => (S.results[b.id].at || '').localeCompare(S.results[a.id].at || ''));
+    L.innerHTML = list.length ? list.map(e => {
+      const r = S.results[e.id];
+      const rows = [['1st','p1','c1'],['2nd','p2','c2'],['3rd','p3','c3'],['Runner-up','p4','c4']]
+        .filter(x => r[x[1]]).map(x => `<li><span class="pl">${x[0]}</span><span class="n">${esc(r[x[1]])}${r[x[2]] ? `<small>${esc(r[x[2]])}</small>` : ''}</span></li>`).join('');
+      return `<div class="item"><div class="row"><h3>${esc(e.name)}</h3><span class="pill done">${esc(fmtTime(r.at))}</span></div>
+        <div class="meta">${esc([e.category, e.venue].filter(Boolean).join(', '))}</div><ul class="win">${rows}</ul>
+        ${r.notes ? `<div class="note">${esc(r.notes)}</div>` : ''}<div class="note">Entered by ${esc(r.by)}</div></div>`;
+    }).join('') : '<div class="empty">No results declared yet. New results appear here within seconds.</div>';
+    const pend = S.events.filter(e => !isDone(e.id));
+    $('#waiting').textContent = pend.length ? 'Waiting for: ' + pend.map(e => e.name).join(', ') : 'All events declared.';
+  }
+  else if (S.tab === 'users'){
+    L.innerHTML = S.users.length ? S.users.map(u => `<div class="item"><div class="row"><h3>${esc(u.name)}</h3>
+      <span class="pill ${u.active ? 'done' : 'off'}">${u.active ? esc(u.role) : 'Disabled'}</span></div>
+      <div class="meta">${esc(u.username)}${u.role === 'faculty' ? ', ' + (u.events === 'ALL' ? 'all events' : (u.events ? u.events.split(',').length : 0) + ' events') : ''}</div>
+      <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openUser('${esc(u.username)}')">Edit</button>
+      ${u.username === S.me.username ? '' : `<button class="btn ghost small" onclick="delUser('${esc(u.username)}')">Delete</button>`}</div></div>`).join('')
+      : '<div class="empty">No users yet.</div>';
+  }
+  else if (S.tab === 'manage'){
+    const list = S.events.filter(match);
+    L.innerHTML = list.length ? list.map(e => `<div class="item"><div class="row"><h3>${esc(e.name)}</h3>
+      <button class="btn ghost small" onclick="delEvent('${e.id}')">Delete</button></div>
+      <div class="meta">${esc(e.id)}${e.category ? ', ' + esc(e.category) : ''}${e.venue ? ', ' + esc(e.venue) : ''}</div></div>`).join('')
+      : '<div class="empty">No events yet. Add your event list above.</div>';
+  }
+}
+
+/* ====== RESULT EDITOR ====== */
+function openEditor(id){
+  const e = S.events.find(x => x.id === id), r = S.results[id] || {};
+  const rows = [['1st place','1'],['2nd place','2'],['3rd place','3'],['Runner-up','4']];
+  openDlg(`<h2>${esc(e.name)}</h2><p class="sub">${esc([e.category, e.venue].filter(Boolean).join(', '))}${r.at ? ' · last saved ' + esc(fmtTime(r.at)) : ''}</p>
+  <div class="err" id="fe" hidden></div>
+  <form id="rf">${rows.map(([l,n]) => `<fieldset><legend>${l}</legend>
+    <input name="p${n}" placeholder="Winner or team name${n==='1' ? ' (required)' : ''}" value="${esc(r['p'+n])}" ${n==='1' ? 'required' : ''} autocomplete="off">
+    <input name="c${n}" placeholder="Class or department" value="${esc(r['c'+n])}" autocomplete="off"></fieldset>`).join('')}
+  <label>Notes <textarea name="notes" rows="2" placeholder="Optional">${esc(r.notes)}</textarea></label>
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">Save result</button></div></form>`);
+  $('#rf').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const fd = Object.fromEntries(new FormData(ev.target)), b = $('#sb'), er = $('#fe');
+    er.hidden = true; b.disabled = true; b.textContent = 'Saving…';
+    try { await api('saveResult', { eventId:id, result:fd }); closeDlg(); toast('Result saved'); await refresh(); }
+    catch(err){ er.textContent = err.message; er.hidden = false; b.disabled = false; b.textContent = 'Save result'; }
+  });
+}
+
+/* ====== PASSWORD ====== */
+function openPassword(){
+  openDlg(`<h2>Change password</h2><p class="sub">Use at least 6 characters.</p><div class="err" id="fe" hidden></div>
+  <form id="pf"><label>Current password <input name="o" type="password" autocomplete="current-password" required></label>
+  <label>New password <input name="n" type="password" autocomplete="new-password" minlength="6" required></label>
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold">Change password</button></div></form>`);
+  $('#pf').addEventListener('submit', async ev => {
+    ev.preventDefault(); const f = ev.target;
+    try { await api('changePassword', { oldPassword:f.o.value, newPassword:f.n.value }); closeDlg(); toast('Password changed'); }
+    catch(err){ $('#fe').textContent = err.message; $('#fe').hidden = false; }
+  });
+}
+
+/* ====== USERS (admin) ====== */
+function genPw(){ const a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let p = ''; for (let i = 0; i < 8; i++) p += a[Math.floor(Math.random() * a.length)]; return p; }
+
+function openUser(username){
+  const u = username ? S.users.find(x => x.username === username) : null;
+  const sel = u ? (u.events === 'ALL' ? 'ALL' : u.events.split(',')) : [];
+  openDlg(`<h2>${u ? 'Edit user' : 'Add user'}</h2><p class="sub">${u ? esc(u.username) : 'Faculty sign in with the username and password you set here.'}</p>
+  <div class="err" id="fe" hidden></div>
+  <form id="uf">
+  ${u ? '' : '<label>Username <input name="username" autocapitalize="none" autocomplete="off" required></label>'}
+  <label>Full name <input name="name" value="${esc(u ? u.name : '')}" required></label>
+  <label>Role <select name="role" id="ur"><option value="faculty">Faculty (enters results)</option><option value="committee">Committee (views results)</option><option value="admin">Admin (full access)</option></select></label>
+  <label>${u ? 'New password (leave empty to keep)' : 'Password'}
+    <span class="inline"><input name="password" id="upw" autocomplete="new-password" ${u ? '' : 'required'} minlength="6"><button type="button" class="btn ghost small" onclick="$('#upw').value=genPw()">Generate</button></span></label>
+  ${u ? `<label style="display:flex;gap:10px;align-items:center;font-weight:500"><input type="checkbox" name="active" style="width:auto;margin:0" ${u.active ? 'checked' : ''}> Account active</label>` : ''}
+  <div id="evbox"><label>Events this faculty can enter
+    <div class="checks" id="evl">
+      <label><input type="checkbox" id="all" ${sel === 'ALL' ? 'checked' : ''}> All events</label>
+      ${S.events.map(e => `<label><input type="checkbox" class="ev" value="${e.id}" ${sel !== 'ALL' && sel.includes(e.id) ? 'checked' : ''} ${sel === 'ALL' ? 'disabled' : ''}> ${esc(e.name)}</label>`).join('')}
+    </div></label></div>
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">${u ? 'Save changes' : 'Create user'}</button></div></form>`);
+  const f = $('#uf'); f.role.value = u ? u.role : 'faculty';
+  const sync = () => { $('#evbox').hidden = f.role.value !== 'faculty'; };
+  f.role.addEventListener('change', sync); sync();
+  $('#all').addEventListener('change', e => document.querySelectorAll('.ev').forEach(c => { c.disabled = e.target.checked; }));
+  f.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const events = $('#all').checked ? 'ALL' : [...document.querySelectorAll('.ev:checked')].map(c => c.value).join(',');
+    const p = { name:f.name.value, role:f.role.value, events, password:f.password.value };
+    const b = $('#sb'); b.disabled = true;
+    try {
+      if (u){ p.username = u.username; p.active = f.active.checked; await api('updateUser', p); }
+      else { p.username = f.username.value; await api('createUser', p); }
+      closeDlg(); toast(u ? 'User updated' : 'User created');
+      S.users = (await api('listUsers')).users; paint();
+    } catch(err){ $('#fe').textContent = err.message; $('#fe').hidden = false; b.disabled = false; }
+  });
+}
+async function delUser(un){
+  if (!confirm('Delete user ' + un + '? Their saved results stay.')) return;
+  try { await api('deleteUser', { username:un }); toast('User deleted'); S.users = (await api('listUsers')).users; paint(); }
+  catch(e){ toast(e.message, true); }
+}
+
+/* ====== EVENTS (admin) ====== */
+async function addEvents(){
+  const items = $('#bulk').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const p = l.split('|').map(x => x.trim()); return { name:p[0], category:p[1] || '', venue:p[2] || '' };
+  });
+  if (!items.length) return toast('Type at least one event first', true);
+  const b = $('#addBtn'); b.disabled = true;
+  try { const j = await api('addEvents', { items }); $('#bulk').value = ''; toast(j.added + ' events added'); await refresh(); }
+  catch(e){ toast(e.message, true); }
+  b.disabled = false;
+}
+async function delEvent(id){
+  const e = S.events.find(x => x.id === id);
+  if (!confirm('Delete "' + e.name + '" and its result?')) return;
+  try { await api('deleteEvent', { id }); toast('Event deleted'); await refresh(); } catch(err){ toast(err.message, true); }
+}
+
+/* ====== EXPORT ====== */
+function exportXlsx(){
+  const rows = S.events.map(e => {
+    const r = S.results[e.id] || {};
+    return { 'Event':e.name, 'Category':e.category, 'Venue':e.venue,
+      '1st':r.p1||'', '1st class':r.c1||'', '2nd':r.p2||'', '2nd class':r.c2||'',
+      '3rd':r.p3||'', '3rd class':r.c3||'', 'Runner-up':r.p4||'', 'Runner-up class':r.c4||'',
+      'Notes':r.notes||'', 'Entered by':r.by||'', 'Saved at':r.at ? new Date(r.at).toLocaleString() : '' };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows), wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Results');
+  XLSX.writeFile(wb, 'Pratibha_Results.xlsx');
+}
+
+/* ====== BOOT ====== */
+(async function(){
+  const t = store.get('prt_token');
+  if (t){ S.token = t; try { await startApp(); } catch(e){ endSession(); } }
+})();
+</script>
+</body>
+</html>
