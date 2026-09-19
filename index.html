@@ -112,12 +112,39 @@ dialog h2{font-size:22px}
 #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 16px;border-radius:10px;z-index:99;max-width:90%;font-weight:500}
 #toast.bad{background:var(--danger)}
 @media(prefers-reduced-motion:no-preference){.strip i{transition:background .4s}}
+
+/* loading + polish */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shimmer{to{background-position:-200% 0}}
+@keyframes slide{from{background-position:-50% 0}to{background-position:150% 0}}
+@keyframes pop{from{opacity:0;transform:translateY(12px) scale(.98)}}
+@keyframes fade{from{opacity:0}}
+@keyframes up{from{opacity:0;transform:translate(-50%,10px)}}
+.btn:disabled::after{content:'';display:inline-block;width:14px;height:14px;margin-left:9px;vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+.sk-l{height:14px;border-radius:6px;margin:8px 0;background:linear-gradient(90deg,#E6EAF0 25%,#F4F6F9 50%,#E6EAF0 75%);background-size:200% 100%;animation:shimmer 1.2s linear infinite}
+.sk-l.w60{width:60%;height:18px}.sk-l.w40{width:40%}
+.strip.loading i{background:linear-gradient(90deg,var(--ink2) 25%,#35476E 50%,var(--ink2) 75%);background-size:200% 100%;animation:shimmer 1.2s linear infinite}
+#topbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:100;opacity:0;transition:opacity .2s;pointer-events:none;background:linear-gradient(90deg,transparent,var(--gold),transparent) no-repeat;background-size:50% 100%;animation:slide 1s linear infinite}
+#topbar.on{opacity:1}
+.splash{position:fixed;inset:0;background:var(--ink);display:grid;place-items:center;z-index:50}
+.spin{width:38px;height:38px;border:4px solid var(--ink2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+.x{position:absolute;top:12px;right:12px;width:36px;height:36px;border:0;border-radius:50%;background:var(--paper);font-size:22px;line-height:1;color:var(--ink)}
+.x:hover{background:var(--line)}
+dialog h2{padding-right:40px}
+@media(prefers-reduced-motion:no-preference){
+  dialog[open]{animation:pop .18s ease-out}
+  dialog[open]::backdrop{animation:fade .18s}
+  #toast{animation:up .2s ease-out}
+}
+@media(prefers-reduced-motion:reduce){.sk-l,.strip.loading i,#topbar,.spin,.btn:disabled::after{animation-duration:3s}}
 </style>
 </head>
 <body>
+<div id="topbar"></div>
+<div class="splash" id="splash" hidden><div class="spin" role="status" aria-label="Loading"></div></div>
 
 <!-- LOGIN -->
-<section class="login" id="login">
+<section class="login" id="login" hidden>
   <form class="login-box" id="loginForm">
     <h1>Pratibha Results Desk</h1>
     <p>Sign in to enter or view event results.</p>
@@ -138,8 +165,8 @@ dialog h2{font-size:22px}
       <button class="btn" onclick="logout()">Sign out</button>
     </div>
     <div class="prog">
-      <div class="prog-label"><span><b id="pn">0</b> of <span id="pt">0</span> events declared</span><span id="pl"></span></div>
-      <div class="strip" id="strip" aria-hidden="true"></div>
+      <div class="prog-label"><span id="pmain">Loading events…</span><span id="pl"></span></div>
+      <div class="strip loading" id="strip" aria-hidden="true"></div>
     </div>
   </header>
   <nav class="tabs" id="tabs" role="tablist"></nav>
@@ -170,19 +197,24 @@ function toast(msg, bad){
   clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3200);
 }
 
-async function api(action, payload = {}){
+let pending = 0;
+async function api(action, payload = {}, silent){
   if (API_URL.startsWith('PASTE')) throw new Error('Set API_URL in index.html first');
-  let res;
+  if (!silent){ pending++; $('#topbar').classList.add('on'); }
   try {
-    res = await fetch(API_URL, { method:'POST', redirect:'follow', body: JSON.stringify({ action, token:S.token, ...payload }) });
-  } catch(e){ throw new Error('No connection. Check your internet and try again.'); }
-  let j;
-  try { j = await res.json(); } catch(e){ throw new Error('Server sent an unexpected reply. Check the web app deployment.'); }
-  if (!j.ok){
-    if (j.code === 'AUTH'){ endSession(); }
-    throw new Error(j.error || 'Something went wrong');
+    let res;
+    try { res = await fetch(API_URL, { method:'POST', redirect:'follow', body: JSON.stringify({ action, token:S.token, ...payload }) }); }
+    catch(e){ throw new Error('No connection. Check your internet and try again.'); }
+    let j;
+    try { j = await res.json(); } catch(e){ throw new Error('Server sent an unexpected reply. Check the web app deployment.'); }
+    if (!j.ok){
+      if (j.code === 'AUTH') endSession(j.error);
+      throw new Error(j.error || 'Something went wrong');
+    }
+    return j;
+  } finally {
+    if (!silent){ pending--; if (!pending) $('#topbar').classList.remove('on'); }
   }
-  return j;
 }
 
 function fmtTime(iso){
@@ -194,50 +226,86 @@ function fmtTime(iso){
 const isDone = id => !!(S.results[id] && S.results[id].p1);
 const role = () => S.me ? S.me.role : '';
 const dlg = $('#dlg');
-function openDlg(html){ dlg.innerHTML = html; if (!dlg.open) dlg.showModal(); }
+function openDlg(html){
+  dlg.innerHTML = '<button type="button" class="x" onclick="closeDlg()" aria-label="Close">×</button>' + html;
+  if (!dlg.open) dlg.showModal();
+  const f = dlg.querySelector('input:not([hidden]),select,textarea');
+  if (f && !matchMedia('(pointer:coarse)').matches) f.focus();
+}
+function confirmBox(title, msg, okLabel){
+  return new Promise(res => {
+    let done = false;
+    const fin = v => { if (done) return; done = true; dlg.removeEventListener('close', onClose); res(v); };
+    const onClose = () => fin(false);
+    dlg.addEventListener('close', onClose);
+    openDlg(`<h2>${esc(title)}</h2><p class="sub">${esc(msg)}</p><div class="actions"><button type="button" class="btn ghost" id="cn">Cancel</button><button type="button" class="btn danger" id="cy">${esc(okLabel)}</button></div>`);
+    $('#cn').onclick = () => closeDlg();
+    $('#cy').onclick = () => { fin(true); closeDlg(); };
+  });
+}
 function closeDlg(){ if (dlg.open) dlg.close(); }
 
 /* ====== AUTH ====== */
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const b = $('#lbtn'), er = $('#loginErr'); er.hidden = true; b.disabled = true; b.textContent = 'Signing in…';
+  const b = $('#lbtn'), er = $('#loginErr'); er.hidden = true; b.disabled = true; b.textContent = 'Signing in';
   try {
     const j = await api('login', { username:$('#lu').value, password:$('#lp').value });
-    S.token = j.token; store.set('prt_token', j.token); $('#lp').value = '';
-    await startApp();
+    S.token = j.token; S.me = j.me; store.set('prt_token', j.token); store.set('prt_me', JSON.stringify(j.me));
+    $('#lp').value = ''; showApp(); loadFirst();
   } catch(err){ er.textContent = err.message; er.hidden = false; }
   b.disabled = false; b.textContent = 'Sign in';
 });
 
-function endSession(){
-  S.token = ''; S.me = null; store.del('prt_token'); clearInterval(pollT);
-  closeDlg(); $('#app').hidden = true; $('#login').hidden = false;
+let pollT;
+function endSession(msg){
+  S.token = ''; S.me = null; S.loaded = false; S.events = []; S.results = {}; S.users = []; S.usersLoaded = false;
+  store.del('prt_token'); store.del('prt_me'); clearInterval(pollT);
+  closeDlg(); $('#splash').hidden = true; $('#app').hidden = true; $('#login').hidden = false;
+  const er = $('#loginErr'); if (msg){ er.textContent = msg; er.hidden = false; } else er.hidden = true;
 }
 async function logout(){ try{ await api('logout'); }catch(e){} endSession(); }
 
-let pollT;
-async function startApp(){
-  await refresh(true);
+function paintWho(){ $('#who').innerHTML = esc(S.me.name || '') + '<br>' + esc(S.me.role || ''); }
+function showApp(){
   $('#login').hidden = true; $('#app').hidden = false;
-  $('#who').innerHTML = esc(S.me.name) + '<br>' + esc(S.me.role);
-  buildTabs();
-  clearInterval(pollT);
-  pollT = setInterval(() => { if (!document.hidden && !dlg.open) refresh(); }, POLL_MS);
+  paintWho(); buildTabs(); paintProgress();
+  clearInterval(pollT); pollT = setInterval(poll, POLL_MS);
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && S.token && !dlg.open) refresh(); });
+async function poll(){ if (document.hidden || dlg.open || !S.token || !S.loaded) return; try{ await refresh(); }catch(e){} }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 
-async function refresh(first){
-  const j = await api('data');
-  S.me = j.me; S.events = j.events; S.results = j.results;
-  if (!first){ paintProgress(); paint(); } else paintProgress();
+async function loadFirst(){
+  S.loaded = false; paintProgress(); paint();
+  try { await refresh(); }
+  catch(e){ if (S.token) showRetry(e.message); }
+}
+function showRetry(msg){
+  $('#view').innerHTML = `<div class="empty">${esc(msg)}<br><br><button class="btn" onclick="retry()">Try again</button></div>`;
+}
+function retry(){ setTab(S.tab || tabsFor()[0][0]); loadFirst(); }
+
+async function refresh(){
+  const j = await api('data', {}, S.loaded);
+  const roleChanged = !S.me || S.me.role !== j.me.role;
+  S.events = j.events; S.results = j.results; S.loaded = true; S.me = j.me;
+  store.set('prt_me', JSON.stringify(j.me)); paintWho();
+  if (roleChanged) buildTabs();
+  paintProgress(); paint();
 }
 
 /* ====== PROGRESS ====== */
 function paintProgress(){
+  const st = $('#strip');
+  if (!S.loaded){
+    $('#pmain').textContent = 'Loading events…'; $('#pl').textContent = '';
+    st.classList.add('loading'); st.innerHTML = '<i></i>'.repeat(31); return;
+  }
+  st.classList.remove('loading');
   const total = S.events.length, done = S.events.filter(e => isDone(e.id)).length;
-  $('#pn').textContent = done; $('#pt').textContent = total;
+  $('#pmain').innerHTML = `<b>${done}</b> of ${total} events declared`;
   $('#pl').textContent = total ? Math.round(done * 100 / total) + '%' : '';
-  $('#strip').innerHTML = S.events.map(e => `<i class="${isDone(e.id) ? 'on' : ''}"></i>`).join('');
+  st.innerHTML = S.events.map(e => `<i class="${isDone(e.id) ? 'on' : ''}"></i>`).join('');
 }
 
 /* ====== TABS ====== */
@@ -266,7 +334,9 @@ async function setTab(k){
       ${canX ? '<button class="btn gold" onclick="exportXlsx()">Download Excel</button>' : ''}</div><div id="list" class="list"></div><p class="waiting" id="waiting"></p>`;
   } else if (k === 'users'){
     v.innerHTML = `<div class="bar"><button class="btn gold" onclick="openUser()">Add user</button></div><div id="list" class="list"></div>`;
+    S.usersLoaded = false; paint();
     try { S.users = (await api('listUsers')).users; } catch(e){ toast(e.message, true); }
+    S.usersLoaded = true;
   } else if (k === 'manage'){
     v.innerHTML = `<form class="item" id="af" style="margin-bottom:14px"><h3>Add an event</h3><p class="meta" style="margin-bottom:12px">Fill in the details and save. Venue can be added later.</p>
       <label>Event name <input name="name" placeholder="e.g. Group Song (Indian)" autocomplete="off" required></label>
@@ -292,8 +362,12 @@ function setFilter(f){
 /* ====== PAINT ====== */
 function match(e){ const q = S.q.trim().toLowerCase(); return !q || (e.name + ' ' + e.category + ' ' + e.venue).toLowerCase().includes(q); }
 
+const SKELETON = '<div class="item"><div class="sk-l w60"></div><div class="sk-l w40"></div></div>'.repeat(6);
 function paint(){
   const L = $('#list'); if (!L) return;
+  if (!S.loaded || (S.tab === 'users' && !S.usersLoaded)){
+    L.innerHTML = SKELETON; const w = $('#waiting'); if (w) w.textContent = ''; return;
+  }
   if (S.tab === 'enter'){
     const list = S.events.filter(e => e.canEdit && match(e) &&
       (S.filter === 'all' || (S.filter === 'declared') === isDone(e.id)));
@@ -369,7 +443,7 @@ function openPassword(){
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold">Change password</button></div></form>`);
   $('#pf').addEventListener('submit', async ev => {
     ev.preventDefault(); const f = ev.target;
-    try { await api('changePassword', { oldPassword:f.o.value, newPassword:f.n.value }); closeDlg(); toast('Password changed'); }
+    try { const j = await api('changePassword', { oldPassword:f.o.value, newPassword:f.n.value }); S.token = j.token; store.set('prt_token', j.token); closeDlg(); toast('Password changed'); }
     catch(err){ $('#fe').textContent = err.message; $('#fe').hidden = false; }
   });
 }
@@ -413,7 +487,7 @@ function openUser(username){
   });
 }
 async function delUser(un){
-  if (!confirm('Delete user ' + un + '? Their saved results stay.')) return;
+  if (!await confirmBox('Delete user?', un + ' will no longer be able to sign in. Results they saved are kept.', 'Delete user')) return;
   try { await api('deleteUser', { username:un }); toast('User deleted'); S.users = (await api('listUsers')).users; paint(); }
   catch(e){ toast(e.message, true); }
 }
@@ -461,7 +535,7 @@ function openEventEdit(id){
 }
 async function delEvent(id){
   const e = S.events.find(x => x.id === id);
-  if (!confirm('Delete "' + e.name + '" and its result?')) return;
+  if (!await confirmBox('Delete event?', e.name + ' and any saved winners for it will be removed.', 'Delete event')) return;
   try { await api('deleteEvent', { id }); toast('Event deleted'); await refresh(); } catch(err){ toast(err.message, true); }
 }
 
@@ -480,9 +554,17 @@ function exportXlsx(){
 }
 
 /* ====== BOOT ====== */
-(async function(){
-  const t = store.get('prt_token');
-  if (t){ S.token = t; try { await startApp(); } catch(e){ endSession(); } }
+(function(){
+  const t = store.get('prt_token'); let me = null;
+  try { me = JSON.parse(store.get('prt_me') || 'null'); } catch(e){}
+  if (!t){ $('#login').hidden = false; return; }          // never signed in: show login
+  S.token = t;
+  if (me){ S.me = me; showApp(); loadFirst(); return; }   // signed in: go straight to the app
+  $('#splash').hidden = false;                            // signed in but profile not cached yet
+  api('data').then(j => {
+    S.me = j.me; store.set('prt_me', JSON.stringify(j.me));
+    $('#splash').hidden = true; showApp(); loadFirst();
+  }).catch(() => { $('#splash').hidden = true; if (S.token) $('#login').hidden = false; });
 })();
 </script>
 </body>
