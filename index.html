@@ -327,7 +327,8 @@ function paint(){
   else if (S.tab === 'manage'){
     const list = S.events.filter(match);
     L.innerHTML = list.length ? list.map(e => `<div class="item"><div class="row"><h3>${esc(e.name)}</h3>
-      <button class="btn ghost small" onclick="delEvent('${e.id}')">Delete</button></div>
+      <div style="display:flex;gap:6px"><button class="btn ghost small" onclick="openEventEdit('${e.id}')">Edit</button>
+      <button class="btn ghost small" onclick="delEvent('${e.id}')">Delete</button></div></div>
       <div class="meta">${esc(e.id)}${e.category ? ', ' + esc(e.category) : ''}${e.venue ? ', ' + esc(e.venue) : ''}</div></div>`).join('')
       : '<div class="empty">No events yet. Add your event list above.</div>';
   }
@@ -420,6 +421,19 @@ async function addEvents(){
   try { const j = await api('addEvents', { items }); $('#bulk').value = ''; toast(j.added + ' events added'); await refresh(); }
   catch(e){ toast(e.message, true); }
   b.disabled = false;
+}
+function openEventEdit(id){
+  const e = S.events.find(x => x.id === id);
+  openDlg(`<h2>Edit event</h2><p class="sub">Winners already saved for this event are kept.</p><div class="err" id="fe" hidden></div>
+  <form id="ef"><label>Event name <input name="name" value="${esc(e.name)}" required></label>
+  <label>Category <input name="category" value="${esc(e.category)}"></label>
+  <label>Venue <input name="venue" value="${esc(e.venue)}"></label>
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">Save changes</button></div></form>`);
+  $('#ef').addEventListener('submit', async ev => {
+    ev.preventDefault(); const f = ev.target, b = $('#sb'); b.disabled = true;
+    try { await api('updateEvent', { id, name:f.name.value, category:f.category.value, venue:f.venue.value }); closeDlg(); toast('Event updated'); await refresh(); }
+    catch(err){ $('#fe').textContent = err.message; $('#fe').hidden = false; b.disabled = false; }
+  });
 }
 async function delEvent(id){
   const e = S.events.find(x => x.id === id);
