@@ -268,11 +268,18 @@ async function setTab(k){
     v.innerHTML = `<div class="bar"><button class="btn gold" onclick="openUser()">Add user</button></div><div id="list" class="list"></div>`;
     try { S.users = (await api('listUsers')).users; } catch(e){ toast(e.message, true); }
   } else if (k === 'manage'){
-    v.innerHTML = `<div class="item" style="margin-bottom:14px"><h3>Add events</h3>
-      <p class="meta">One event per line. Optional details after a bar: Name | Category | Venue</p>
-      <textarea id="bulk" rows="6" placeholder="Group Song | Music | Main Auditorium&#10;Elocution English | Literary | Seminar Hall"></textarea>
-      <div class="actions"><button class="btn gold" id="addBtn" onclick="addEvents()">Add events</button></div></div>
+    v.innerHTML = `<form class="item" id="af" style="margin-bottom:14px"><h3>Add an event</h3><p class="meta" style="margin-bottom:12px">Fill in the details and save. Venue can be added later.</p>
+      <label>Event name <input name="name" placeholder="e.g. Group Song (Indian)" autocomplete="off" required></label>
+      ${catField('Off-Stage')}
+      <label>Venue <input name="venue" list="venues" placeholder="Optional" autocomplete="off"></label>
+      <datalist id="venues">${[...new Set(S.events.map(e => e.venue).filter(Boolean))].map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+      <div class="actions" style="margin-top:4px"><button class="btn gold" id="addOneBtn">Add event</button></div></form>
+      <details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Add many events at once</summary>
+      <p class="meta">One event per line: Name | Category | Venue</p>
+      <textarea id="bulk" rows="5" placeholder="Group Song | On-Stage Group | Main Auditorium"></textarea>
+      <div class="actions"><button type="button" class="btn ghost" id="addBtn" onclick="addEvents()">Add events</button></div></details>
       <div class="controls"><input id="q" type="search" placeholder="Search events" oninput="S.q=this.value;paint()"></div><div id="list" class="list"></div>`;
+    $('#af').addEventListener('submit', addOne);
   }
   paint();
 }
@@ -412,6 +419,23 @@ async function delUser(un){
 }
 
 /* ====== EVENTS (admin) ====== */
+const CATS = ['Off-Stage', 'On-Stage Individual', 'On-Stage Group'];
+function catField(cur){
+  const known = !cur || CATS.includes(cur);
+  return `<label>Category <select name="cat" onchange="this.form.other.hidden = this.value !== '__other'">
+    ${CATS.map(c => `<option ${c === cur ? 'selected' : ''}>${c}</option>`).join('')}
+    <option value="__other" ${known ? '' : 'selected'}>Other…</option></select>
+    <input name="other" placeholder="Type the new category" value="${known ? '' : esc(cur)}" ${known ? 'hidden' : ''}></label>`;
+}
+const readCat = f => f.cat.value === '__other' ? f.other.value.trim() : f.cat.value;
+async function addOne(ev){
+  ev.preventDefault(); const f = ev.target, b = $('#addOneBtn'); b.disabled = true;
+  try {
+    await api('addEvents', { items:[{ name:f.name.value, category:readCat(f), venue:f.venue.value }] });
+    f.name.value = ''; f.venue.value = ''; toast('Event added'); await refresh(); f.name.focus();
+  } catch(e){ toast(e.message, true); }
+  b.disabled = false;
+}
 async function addEvents(){
   const items = $('#bulk').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
     const p = l.split('|').map(x => x.trim()); return { name:p[0], category:p[1] || '', venue:p[2] || '' };
@@ -426,12 +450,12 @@ function openEventEdit(id){
   const e = S.events.find(x => x.id === id);
   openDlg(`<h2>Edit event</h2><p class="sub">Winners already saved for this event are kept.</p><div class="err" id="fe" hidden></div>
   <form id="ef"><label>Event name <input name="name" value="${esc(e.name)}" required></label>
-  <label>Category <input name="category" value="${esc(e.category)}"></label>
+  ${catField(e.category)}
   <label>Venue <input name="venue" value="${esc(e.venue)}"></label>
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">Save changes</button></div></form>`);
   $('#ef').addEventListener('submit', async ev => {
     ev.preventDefault(); const f = ev.target, b = $('#sb'); b.disabled = true;
-    try { await api('updateEvent', { id, name:f.name.value, category:f.category.value, venue:f.venue.value }); closeDlg(); toast('Event updated'); await refresh(); }
+    try { await api('updateEvent', { id, name:f.name.value, category:readCat(f), venue:f.venue.value }); closeDlg(); toast('Event updated'); await refresh(); }
     catch(err){ $('#fe').textContent = err.message; $('#fe').hidden = false; b.disabled = false; }
   });
 }
