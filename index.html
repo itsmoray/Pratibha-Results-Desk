@@ -48,6 +48,7 @@ fieldset{border:1.5px solid var(--line);border-radius:10px;margin:0 0 12px;paddi
 legend{font-family:var(--head);font-weight:600;padding:0 6px}
 fieldset input{margin-top:8px}
 .err{color:var(--danger);background:var(--danger-soft);border-radius:8px;padding:9px 12px;margin:0 0 12px;font-size:14px}
+.errTxt{color:var(--danger);font-weight:600}
 
 /* buttons */
 .btn{border:0;border-radius:8px;padding:11px 16px;font-weight:600;background:var(--ink);color:#fff}
@@ -746,19 +747,65 @@ function paintHouse(){
 
 /* ====== ROSTER (Students) ====== */
 const houseForClass = c => { const k = String(c || '').trim().toLowerCase(); const m = S.batches.find(b => b.label.toLowerCase() === k); return m ? m.house : ''; };
+const clsLabel = (course, sem, batch) => [course, sem].filter(Boolean).join(' ') + (batch ? ' - ' + batch : '');
+const coursesList = () => { const seen = new Set(), out = []; S.batches.forEach(b => { if (!seen.has(b.course)){ seen.add(b.course); out.push(b.course); } }); return out; };
+const semsForCourse = course => { const seen = new Set(), out = []; S.batches.forEach(b => { if (b.course === course && !seen.has(b.sem)){ seen.add(b.sem); out.push(b.sem); } }); return out; };
+const batchesForCourseSem = (course, sem) => { const seen = new Set(), out = []; S.batches.forEach(b => { if (b.course === course && b.sem === sem && !seen.has(b.batch)){ seen.add(b.batch); out.push(b.batch); } }); return out; };
+function classCascadeHTML(prefix){
+  return `<div class="inline">
+  <label style="flex:1">Course <select name="${prefix}Course"><option value="">Choose…</option>${coursesList().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select></label>
+  <label style="flex:1">Semester <select name="${prefix}Sem" disabled><option value="">Choose…</option></select></label>
+  <label style="flex:1">Batch <select name="${prefix}Batch" disabled><option value="">Choose…</option></select></label>
+  </div>`;
+}
+function wireClassCascade(form, prefix, onHouse){
+  const courseSel = form[prefix + 'Course'], semSel = form[prefix + 'Sem'], batchSel = form[prefix + 'Batch'], hidden = form.cls;
+  function paintSem(){
+    const sems = semsForCourse(courseSel.value);
+    semSel.innerHTML = '<option value="">Choose…</option>' + sems.map(s => `<option value="${esc(s)}">${esc(s || 'No semester')}</option>`).join('');
+    semSel.disabled = sems.length <= 1;
+    if (sems.length === 1) semSel.value = sems[0];
+  }
+  function paintBatch(){
+    const batches = courseSel.value ? batchesForCourseSem(courseSel.value, semSel.value) : [];
+    batchSel.innerHTML = '<option value="">Choose…</option>' + batches.map(b => `<option value="${esc(b)}">${esc(b || 'General')}</option>`).join('');
+    batchSel.disabled = batches.length <= 1;
+    if (batches.length === 1) batchSel.value = batches[0];
+  }
+  function sync(){
+    hidden.value = clsLabel(courseSel.value, semSel.value, batchSel.value);
+    if (onHouse) onHouse(houseForClass(hidden.value));
+  }
+  courseSel.addEventListener('change', () => { paintSem(); paintBatch(); sync(); });
+  semSel.addEventListener('change', () => { paintBatch(); sync(); });
+  batchSel.addEventListener('change', sync);
+  return {
+    setFromCls(cls){
+      // only touches the selects (and hidden value) when the stored class matches a known course/sem/batch;
+      // otherwise leaves the hidden field as-is so an unrecognised legacy value isn't silently wiped on save
+      const k = String(cls || '').trim().toLowerCase();
+      const m = S.batches.find(b => b.label.toLowerCase() === k);
+      if (!m) return;
+      courseSel.value = m.course;
+      paintSem(); semSel.value = m.sem;
+      paintBatch(); batchSel.value = m.batch;
+      sync();
+    }
+  };
+}
 function oneStudentForm(){
   return `<details class="item" style="margin-bottom:14px" open><summary style="cursor:pointer;font-weight:600">Add one student</summary>
   <form id="osf" style="margin-top:10px"><div class="inline"><label style="flex:1">Chest no. <input name="chest" required autocomplete="off"></label><label style="flex:2">Name <input name="name" required autocomplete="off"></label></div>
-  <label>Class / batch <input name="cls" list="batchDL" placeholder="Choose from the list" autocomplete="off"></label>
+  ${classCascadeHTML('os')}
+  <input type="hidden" name="cls">
   <div class="inline"><label style="flex:1">House <select name="house"><option value="">Choose…</option>${HOUSES_UI.map(x => `<option>${x}</option>`).join('')}</select></label>
   <label style="flex:1">Gender <select name="gender"><option value="">Not set</option><option value="F">Female</option><option value="M">Male</option></select></label></div>
   <div class="hint" id="osHint"></div>
-  <datalist id="batchDL">${S.batches.map(b => `<option value="${esc(b.label)}">`).join('')}</datalist>
   <div class="actions"><button class="btn gold" id="osb">Add student</button></div></form></details>`;
 }
 function wireOneStudent(){
   const f = $('#osf'); if (!f) return;
-  f.cls.addEventListener('input', () => { const x = houseForClass(f.cls.value); if (x) f.house.value = x; $('#osHint').textContent = x ? 'House filled in from the batch: ' + x : ''; });
+  wireClassCascade(f, 'os', x => { if (x) f.house.value = x; $('#osHint').textContent = x ? 'House filled in from the batch: ' + x : ''; });
   f.addEventListener('submit', async ev => {
     ev.preventDefault(); const b = $('#osb'); b.disabled = true;
     try {
@@ -783,12 +830,14 @@ function openStudentEdit(chest){
   const s = studentBy(chest);
   openDlg(`<h2>Edit student</h2><p class="sub">Chest number #${esc(chest)}</p><div class="err" id="fe" hidden></div>
   <form id="sf"><label>Name <input name="name" value="${esc(s.name)}" required></label>
-  <label>Class / batch <input name="cls" value="${esc(s.cls)}" list="batchDL" autocomplete="off"></label>
+  ${classCascadeHTML('sf')}
+  <input type="hidden" name="cls" value="${esc(s.cls)}">
+  ${s.cls ? `<div class="hint">Currently: ${esc(s.cls)}${!S.batches.find(b => b.label.toLowerCase() === s.cls.trim().toLowerCase()) ? " (doesn't match the course list — pick one above to replace it, or leave as is)" : ''}</div>` : ''}
   <label>House <input name="house" value="${esc(s.house)}" list="houseDL"></label>
   <label>Gender <select name="gender"><option value="">Not set</option><option value="F" ${s.gender === 'F' ? 'selected' : ''}>Female</option><option value="M" ${s.gender === 'M' ? 'selected' : ''}>Male</option></select></label>
   <datalist id="houseDL">${HOUSES_UI.map(h => `<option value="${esc(h)}">`).join('')}</datalist>
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">Save changes</button></div></form>`);
-  $('#sf').cls.addEventListener('input', e => { const hh = houseForClass(e.target.value); if (hh) $('#sf').house.value = hh; });
+  wireClassCascade($('#sf'), 'sf', hh => { if (hh) $('#sf').house.value = hh; }).setFromCls(s.cls);
   $('#sf').addEventListener('submit', async ev => {
     ev.preventDefault(); const f = ev.target, b = $('#sb'), er = $('#fe'); er.hidden = true; b.disabled = true;
     try { await api('updateStudent', { chest, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value }); closeDlg(); toast('Student updated'); await refresh(); }
@@ -803,6 +852,9 @@ async function delStudent(chest){
 const HOUSES_UI = ['Shadjam','Rishabham','Gandharam','Madhyamam','Panchamam','Dhaivatam','Nishadam'];
 
 /* ====== JUDGING (admin/committee review + declare) ====== */
+const whoCell = r => r.missing
+  ? `<span class="errTxt">Chest #${esc(r.chest)}</span><small>not on the roster — safe to remove</small>`
+  : `${esc(r.name)}<small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small>`;
 async function openJudging(id){
   openDlg(`<h2>Loading…</h2><div class="sk-l w60"></div><div class="sk-l w40"></div>`);
   let j;
@@ -817,7 +869,7 @@ function renderJudging(j){
   const rows = j.entries.map((r, i) => {
     const cells = j.judges.map(jg => `<td>${r.perJudge[jg.email] === null ? '—' : r.perJudge[jg.email]}${jg.locked ? '' : ' <small>(draft)</small>'}</td>`).join('');
     const cls = r.rank === 1 ? 'rankTop1' : r.rank === 2 ? 'rankTop2' : r.rank === 3 ? 'rankTop3' : '';
-    return `<tr class="${cls}"><td class="who">${esc(r.name)}<small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small></td>
+    return `<tr class="${cls}"><td class="who">${whoCell(r)}</td>
       ${cells}<td><b>${r.avg === null ? '—' : r.avg}</b></td><td>${r.rank ?? '—'}</td></tr>`;
   }).join('');
   const judgeHeads = j.judges.map(jg => `<th>${esc(jg.name)}${jg.locked ? (role() === 'admin' ? `<br><button type="button" class="btn ghost small" onclick="unlockJudge('${ev.id}','${esc(jg.email)}')">Unlock</button>` : '') : ' <small>(entering)</small>'}</th>`).join('');
@@ -856,10 +908,10 @@ function renderScoring(j, draft){
   const maxTotal = cols.reduce((a, c) => a + Number(c.max), 0);
   const rows = j.entries.map(r => {
     const mc = r.mineCrit || {};
-    return `<tr data-chest="${esc(r.chest)}"><td class="who">${esc(r.name)}<small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small></td>
+    return `<tr data-chest="${esc(r.chest)}"><td class="who">${whoCell(r)}</td>
       ${cols.map(c => { const v = draft[r.chest + '|' + c.id] ?? mc[c.id] ?? '';
         return `<td><input type="number" inputmode="decimal" min="0" max="${c.max}" step="any" data-c="${c.id}" data-max="${c.max}" value="${v}" placeholder="/${c.max}" ${dis}></td>`; }).join('')}
-      <td class="tot"><b>—</b></td><td>${me.locked ? '' : `<button type="button" class="btn ghost small" aria-label="Remove ${esc(r.name)}" onclick="removeEntry('${ev.id}','${esc(r.chest)}')">✕</button>`}</td></tr>`;
+      <td class="tot"><b>—</b></td><td>${me.locked ? '' : `<button type="button" class="btn ghost small" aria-label="Remove chest ${esc(r.chest)}" onclick="removeEntry('${ev.id}','${esc(r.chest)}')">✕</button>`}</td></tr>`;
   }).join('');
   const body = j.entries.length ? `<div style="overflow-x:auto"><table class="scoreTbl" id="mtbl"><thead><tr><th>Student</th>
     ${cols.map(c => `<th>${esc(c.name)}<br><small>/${c.max}</small></th>`).join('')}<th>Total<br><small>/${maxTotal}</small></th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
@@ -901,14 +953,16 @@ function renderScoring(j, draft){
   const addBox = $('#addChest');
   if (addBox){
     wireLookup(addBox, $('#addLine'));
+    let addBusy = false;
     addBox.addEventListener('keydown', async e => {
-      if (e.key !== 'Enter') return; e.preventDefault();
+      if (e.key !== 'Enter' || addBusy) return; e.preventDefault();
       const chests = addBox.value.split(/[\s,;]+/).filter(Boolean); if (!chests.length) return;
+      addBusy = true; addBox.disabled = true;
       try {
         const a = await api('addEntries', { eventId: ev.id, chests });
         if (a.missing.length) toast('Not on the roster: ' + a.missing.join(', '), true); else if (a.warn) toast(a.warn, true); else toast(plural(a.added, 'student') + ' added');
         const d = draftNow(); renderScoring(await api('judging', { eventId: ev.id }), d); const b2 = $('#addChest'); if (b2) b2.focus();
-      } catch(err){ toast(err.message, true); }
+      } catch(err){ toast(err.message, true); addBusy = false; addBox.disabled = false; }
     });
   }
   const sb = $('#saveBtn');
