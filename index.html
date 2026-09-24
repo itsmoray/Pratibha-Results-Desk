@@ -179,6 +179,8 @@ dialog h2{padding-right:40px}
 .scoreTbl input[type=number]{width:64px;margin:0;padding:6px 7px}
 .scoreTbl .who{font-weight:600}
 .scoreTbl .who small{display:block;color:var(--muted);font-weight:400}
+.scoreTbl input.bad{border-color:var(--danger);background:var(--danger-soft)}
+.scoreTbl .tot{font-family:var(--head);font-size:17px;white-space:nowrap}
 .rankTop1{background:var(--gold-soft)}
 .rankTop2{background:var(--teal-soft)}
 .rankTop3{background:#F1E4CF}
@@ -321,6 +323,7 @@ function wireLookup(inputEl, lineEl){
   inputEl.addEventListener('input', () => { lineEl.innerHTML = lookupLine(inputEl.value); });
 }
 const dlg = $('#dlg');
+dlg.addEventListener('close', () => { dlg.style.maxWidth = ''; });
 function openDlg(html){
   dlg.innerHTML = '<button type="button" class="x" onclick="closeDlg()" aria-label="Close">×</button>' + html;
   if (!dlg.open) dlg.showModal();
@@ -386,9 +389,9 @@ function retry(){ setTab(S.tab || tabsFor()[0][0]); loadFirst(); }
 async function refresh(){
   const j = await api('data', {}, S.loaded);
   const roleChanged = !S.me || S.me.role !== j.me.role;
-  S.events = j.events; S.results = j.results; S.students = j.students || []; S.houses = j.houses || []; S.champs = j.champs || {}; S.certs = j.certs || {}; S.loaded = true; S.me = j.me;
+  S.events = j.events; S.results = j.results; S.students = j.students || []; S.houses = j.houses || []; S.champs = j.champs || {}; S.certs = j.certs || {}; S.batches = j.batches || []; S.loaded = true; S.me = j.me;
   store.set('prt_me', JSON.stringify(j.me));
-  store.set('prt_data', JSON.stringify({ events:j.events, results:j.results, students:j.students, houses:j.houses, champs:j.champs, certs:j.certs }));
+  store.set('prt_data', JSON.stringify({ events:j.events, results:j.results, students:j.students, houses:j.houses, champs:j.champs, certs:j.certs, batches:j.batches }));
   paintWho();
   if (roleChanged) buildTabs();
   paintProgress(); paint();
@@ -440,11 +443,12 @@ async function setTab(k){
   } else if (k === 'house'){
     v.innerHTML = `<p class="meta" style="margin-bottom:12px">Updates automatically as results are declared. <a href="#live" target="_blank" rel="noopener">Open the big-screen live view</a> (needs no login).</p><div id="list"></div>`;
   } else if (k === 'roster'){
-    v.innerHTML = `<details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Add students</summary>
-      <p class="meta">One student per line: Chest number | Name | Class | House | Gender (M or F)</p>
+    v.innerHTML = `${oneStudentForm()}<details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Add many students at once</summary>
+      <p class="meta">One student per line: Chest number | Name | Class | House | Gender (M or F). Leave House empty if Class is typed exactly as in the batch list: the house fills in by itself.</p><details style="margin-bottom:8px"><summary class="meta" style="cursor:pointer">Show class names</summary><p class="meta">${S.batches.map(b => esc(b.label)).join(' · ')}</p></details>
       <textarea id="bulkStu" rows="5" placeholder="101 | Anjali Menon | S5 BCA | Shadjam | F"></textarea>
       <div class="actions"><button type="button" class="btn ghost" id="addStuBtn" onclick="addStudentsBulk()">Add students</button></div></details>
       <div class="controls"><input id="q" type="search" placeholder="Search roster" oninput="S.q=this.value;paint()"></div><div id="list" class="list"></div>`;
+    wireOneStudent();
   } else if (k === 'board'){
     const canX = role() === 'admin' || role() === 'committee' || role() === 'viewer';
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search declared results" oninput="S.q=this.value;paint()">
@@ -621,13 +625,37 @@ function paintHouse(){
 }
 
 /* ====== ROSTER (Students) ====== */
+const houseForClass = c => { const k = String(c || '').trim().toLowerCase(); const m = S.batches.find(b => b.label.toLowerCase() === k); return m ? m.house : ''; };
+function oneStudentForm(){
+  return `<details class="item" style="margin-bottom:14px" open><summary style="cursor:pointer;font-weight:600">Add one student</summary>
+  <form id="osf" style="margin-top:10px"><div class="inline"><label style="flex:1">Chest no. <input name="chest" required autocomplete="off"></label><label style="flex:2">Name <input name="name" required autocomplete="off"></label></div>
+  <label>Class / batch <input name="cls" list="batchDL" placeholder="Choose from the list" autocomplete="off"></label>
+  <div class="inline"><label style="flex:1">House <select name="house"><option value="">Choose…</option>${HOUSES_UI.map(x => `<option>${x}</option>`).join('')}</select></label>
+  <label style="flex:1">Gender <select name="gender"><option value="">Not set</option><option value="F">Female</option><option value="M">Male</option></select></label></div>
+  <div class="hint" id="osHint"></div>
+  <datalist id="batchDL">${S.batches.map(b => `<option value="${esc(b.label)}">`).join('')}</datalist>
+  <div class="actions"><button class="btn gold" id="osb">Add student</button></div></form></details>`;
+}
+function wireOneStudent(){
+  const f = $('#osf'); if (!f) return;
+  f.cls.addEventListener('input', () => { const x = houseForClass(f.cls.value); if (x) f.house.value = x; $('#osHint').textContent = x ? 'House filled in from the batch: ' + x : ''; });
+  f.addEventListener('submit', async ev => {
+    ev.preventDefault(); const b = $('#osb'); b.disabled = true;
+    try {
+      const j = await api('addStudents', { items:[{ chest:f.chest.value, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value }] });
+      toast(j.added ? 'Student added' : 'Chest number already existed, details updated');
+      f.chest.value = ''; f.name.value = ''; f.chest.focus(); await refresh();
+    } catch(e){ toast(e.message, true); }
+    b.disabled = false;
+  });
+}
 async function addStudentsBulk(){
   const items = $('#bulkStu').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
     const p = l.split('|').map(x => x.trim()); return { chest:p[0], name:p[1] || '', cls:p[2] || '', house:p[3] || '', gender:p[4] || '' };
   });
   if (!items.length) return toast('Type at least one student first', true);
   const b = $('#addStuBtn'); b.disabled = true;
-  try { const j = await api('addStudents', { items }); $('#bulkStu').value = ''; toast(plural(j.added,'student') + ' added, ' + j.updated + ' updated' + (j.unknownHouse ? '. ' + plural(j.unknownHouse,'student') + ' with a house that is not one of the seven' : ''), !!j.unknownHouse); await refresh(); }
+  try { const j = await api('addStudents', { items }); $('#bulkStu').value = ''; toast(plural(j.added,'student') + ' added, ' + j.updated + ' updated' + (j.unknownHouse ? '. ' + plural(j.unknownHouse,'student') + ' with no valid house' : '') + (j.houseMismatch ? '. ' + plural(j.houseMismatch,'student') + ' with a house different from their batch' : ''), !!(j.unknownHouse || j.houseMismatch)); await refresh(); }
   catch(e){ toast(e.message, true); }
   b.disabled = false;
 }
@@ -635,11 +663,12 @@ function openStudentEdit(chest){
   const s = studentBy(chest);
   openDlg(`<h2>Edit student</h2><p class="sub">Chest number #${esc(chest)}</p><div class="err" id="fe" hidden></div>
   <form id="sf"><label>Name <input name="name" value="${esc(s.name)}" required></label>
-  <label>Class <input name="cls" value="${esc(s.cls)}"></label>
+  <label>Class / batch <input name="cls" value="${esc(s.cls)}" list="batchDL" autocomplete="off"></label>
   <label>House <input name="house" value="${esc(s.house)}" list="houseDL"></label>
   <label>Gender <select name="gender"><option value="">Not set</option><option value="F" ${s.gender === 'F' ? 'selected' : ''}>Female</option><option value="M" ${s.gender === 'M' ? 'selected' : ''}>Male</option></select></label>
   <datalist id="houseDL">${HOUSES_UI.map(h => `<option value="${esc(h)}">`).join('')}</datalist>
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">Save changes</button></div></form>`);
+  $('#sf').cls.addEventListener('input', e => { const hh = houseForClass(e.target.value); if (hh) $('#sf').house.value = hh; });
   $('#sf').addEventListener('submit', async ev => {
     ev.preventDefault(); const f = ev.target, b = $('#sb'), er = $('#fe'); er.hidden = true; b.disabled = true;
     try { await api('updateStudent', { chest, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value }); closeDlg(); toast('Student updated'); await refresh(); }
@@ -662,6 +691,7 @@ async function openJudging(id){
 }
 function renderJudging(j){
   const ev = j.event, crit = j.criteria; S.lastJ = j;
+  setTimeout(() => { dlg.style.maxWidth = '960px'; }, 0);
   const overBanner = (j.overLimit || []).map(o => `<p class="err">${esc(o.house)} has ${o.count} entries in this event. The limit is ${o.limit} per house.</p>`).join('') + (j.warnings || []).map(w => `<p class="err">${esc(w)}</p>`).join('');
   const cols = crit.length ? crit.map(c => `<th>${esc(c.name)}<br><small>/${c.max}</small></th>`).join('') : '<th>Mark</th>';
   const rows = j.entries.map((r, i) => {
@@ -699,51 +729,86 @@ async function openScoring(id){
   try { j = await api('judging', { eventId:id }); } catch(e){ closeDlg(); return toast(e.message, true); }
   renderScoring(j);
 }
-function renderScoring(j){
-  const ev = j.event, crit = j.criteria;
-  const me = j.judges.find(jg => jg.email === S.me.email) || { locked:false };
+function renderScoring(j, draft){
+  draft = draft || {};
+  const ev = j.event, crit = j.criteria, cols = crit.length ? crit : [{ id:'_', name:'Mark', max:ev.maxMark }];
+  const me = j.judges.find(jg => jg.email === S.me.email) || { locked:false }, dis = me.locked ? 'disabled' : '';
+  const maxTotal = cols.reduce((a, c) => a + Number(c.max), 0);
   const rows = j.entries.map(r => {
-    const mine = r.perJudge[S.me.email];
-    const inputs = crit.length
-      ? crit.map(c => `<input type="number" min="0" max="${c.max}" step="any" data-c="${c.id}" value="${(r.mineCrit || {})[c.id] ?? ''}" placeholder="/${c.max}">`).join(' ')
-      : `<input type="number" min="0" max="${ev.maxMark}" step="any" data-c="_" value="${(r.mineCrit || {})._ ?? ''}" placeholder="/${ev.maxMark}">`;
+    const mc = r.mineCrit || {};
     return `<tr data-chest="${esc(r.chest)}"><td class="who">${esc(r.name)}<small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small></td>
-      <td>${inputs}</td><td><button type="button" class="btn ghost small" onclick="saveOneMark(this,'${ev.id}')">Save</button></td>
-      <td>${mine === null || mine === undefined ? '—' : mine}</td></tr>`;
+      ${cols.map(c => { const v = draft[r.chest + '|' + c.id] ?? mc[c.id] ?? '';
+        return `<td><input type="number" inputmode="decimal" min="0" max="${c.max}" step="any" data-c="${c.id}" data-max="${c.max}" value="${v}" placeholder="/${c.max}" ${dis}></td>`; }).join('')}
+      <td class="tot"><b>—</b></td><td>${me.locked ? '' : `<button type="button" class="btn ghost small" aria-label="Remove ${esc(r.name)}" onclick="removeEntry('${ev.id}','${esc(r.chest)}')">✕</button>`}</td></tr>`;
   }).join('');
-  const body = j.entries.length ? `<div style="overflow-x:auto"><table class="scoreTbl"><thead><tr><th>Participant</th><th>Marks</th><th></th><th>Your last saved mark</th></tr></thead><tbody>${rows}</tbody></table></div>`
-    : '<p class="hint">No participants yet — add the first one below.</p>';
-  openDlg(`<h2>${esc(ev.name)}</h2><p class="sub">${crit.length ? crit.map(c => c.name + ' /' + c.max).join(', ') : 'Overall mark out of ' + ev.maxMark}</p>
+  const body = j.entries.length ? `<div style="overflow-x:auto"><table class="scoreTbl" id="mtbl"><thead><tr><th>Student</th>
+    ${cols.map(c => `<th>${esc(c.name)}<br><small>/${c.max}</small></th>`).join('')}<th>Total<br><small>/${maxTotal}</small></th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : '<p class="hint">No students yet. Scan or type their chest numbers above.</p>';
+  openDlg(`<h2>${esc(ev.name)}</h2><p class="sub" id="cnt"></p>
   ${me.locked ? '<p class="err">You have submitted your marks for this event. Ask an admin to unlock them if you need to change something.</p>' : ''}
-  <div class="${me.locked ? 'locked' : ''}" id="scoreBody">${body}
-  <div class="fld"><span>Add a participant</span><input id="addChest" placeholder="Type chest number" list="studentsDL" autocomplete="off">
-  <div id="addLine"></div></div>${studentsDL()}</div>
-  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Close</button>
-  ${me.locked ? '' : `<button type="button" class="btn gold" id="lockBtn">Submit final marks</button>`}</div>`);
-  wireLookup($('#addChest'), $('#addLine'));
-  $('#addChest').addEventListener('keydown', async ev => {
-    if (ev.key !== 'Enter') return; ev.preventDefault();
-    const chest = ev.target.value.trim(); if (!chest) return;
-    if (!studentBy(chest)){ $('#addLine').innerHTML = lookupLine(chest); return; }
-    try { const ar = await api('addEntry', { eventId:ev0.id, chest }); toast(ar.warn || 'Participant added', !!ar.warn); const jj = await api('judging', { eventId:ev0.id }); renderScoring(jj); }
-    catch(err){ toast(err.message, true); }
+  ${me.locked ? '' : `<div class="fld"><span>Add students by chest number</span><input id="addChest" inputmode="numeric" placeholder="Scan or type, then Enter. Several numbers are fine (space or comma between)" list="studentsDL" autocomplete="off">
+    <div id="addLine"></div></div>${studentsDL()}`}
+  ${body}
+  <div class="actions"><span class="hint" id="saveState" style="margin:auto auto auto 0"></span><button type="button" class="btn ghost" onclick="closeDlg()">Close</button>
+  ${me.locked ? '' : `<button type="button" class="btn ghost" id="saveBtn">Save marks</button><button type="button" class="btn gold" id="lockBtn">Submit final marks</button>`}</div>`);
+  dlg.style.maxWidth = '960px';
+  const inputs = () => [...dlg.querySelectorAll('#mtbl input[data-c]')];
+  const calc = () => {
+    let full = 0;
+    dlg.querySelectorAll('#mtbl tbody tr').forEach(tr => {
+      const ins = [...tr.querySelectorAll('input[data-c]')]; let sum = 0, all = true;
+      ins.forEach(i => {
+        const bad = i.value !== '' && (Number(i.value) < 0 || Number(i.value) > Number(i.dataset.max));
+        i.classList.toggle('bad', bad);
+        if (i.value === '') all = false; else sum += Number(i.value);
+      });
+      tr.querySelector('.tot b').textContent = all ? Math.round(sum * 100) / 100 : '—'; if (all) full++;
+    });
+    $('#cnt').textContent = plural(j.entries.length, 'student') + ' · ' + full + ' fully marked' + (crit.length ? ' · one mark per criterion, total is added up' : '');
+  };
+  calc();
+  const dirty = () => { const s = $('#saveState'); if (s) s.textContent = 'Unsaved changes'; };
+  inputs().forEach((i, n, all) => {
+    i.addEventListener('input', () => { calc(); dirty(); });
+    i.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); (all[n + 1] || i).focus(); } });
   });
-  const lockBtn = $('#lockBtn');
-  if (lockBtn) lockBtn.onclick = async () => {
-    if (!await confirmBox('Submit final marks?', 'You will not be able to change your marks for this event afterwards unless an admin unlocks them.', 'Submit')) return;
+  const collect = () => [...dlg.querySelectorAll('#mtbl tbody tr')].map(tr => {
+    const marks = {}; tr.querySelectorAll('input[data-c]').forEach(i => { if (i.value !== '') marks[i.dataset.c] = Number(i.value); });
+    return { chest: tr.dataset.chest, marks };
+  }).filter(x => Object.keys(x.marks).length);
+  const draftNow = () => { const d = {}; dlg.querySelectorAll('#mtbl tbody tr').forEach(tr => tr.querySelectorAll('input[data-c]').forEach(i => { if (i.value !== '') d[tr.dataset.chest + '|' + i.dataset.c] = i.value; })); return d; };
+  const saveAll = async () => { const items = collect(); if (!items.length) return true; await api('saveAllMarks', { eventId: ev.id, items }); const s = $('#saveState'); if (s) s.textContent = 'Saved'; return true; };
+  const addBox = $('#addChest');
+  if (addBox){
+    wireLookup(addBox, $('#addLine'));
+    addBox.addEventListener('keydown', async e => {
+      if (e.key !== 'Enter') return; e.preventDefault();
+      const chests = addBox.value.split(/[\s,;]+/).filter(Boolean); if (!chests.length) return;
+      try {
+        const a = await api('addEntries', { eventId: ev.id, chests });
+        if (a.missing.length) toast('Not on the roster: ' + a.missing.join(', '), true); else if (a.warn) toast(a.warn, true); else toast(plural(a.added, 'student') + ' added');
+        const d = draftNow(); renderScoring(await api('judging', { eventId: ev.id }), d); const b2 = $('#addChest'); if (b2) b2.focus();
+      } catch(err){ toast(err.message, true); }
+    });
+  }
+  const sb = $('#saveBtn');
+  if (sb) sb.onclick = async () => { sb.disabled = true; try { if (!collect().length) toast('Enter a mark first', true); else { await saveAll(); toast('Marks saved'); } } catch(e){ toast(e.message, true); } sb.disabled = false; };
+  const lb = $('#lockBtn');
+  if (lb) lb.onclick = async () => {
+    lb.disabled = true;
+    try { await saveAll(); } catch(e){ toast(e.message, true); lb.disabled = false; return; }
+    const missing = j.entries.length - [...dlg.querySelectorAll('#mtbl tbody tr')].filter(tr => [...tr.querySelectorAll('input[data-c]')].every(i => i.value !== '')).length;
+    const ok = await confirmBox('Submit final marks?', (missing ? missing + ' student(s) are not fully marked and will not count for you. ' : '') + 'You will not be able to change your marks afterwards unless an admin unlocks them.', 'Submit');
+    if (!ok){ openScoring(ev.id); return; }
     try { await api('lockSubmission', { eventId: ev.id }); toast('Marks submitted'); closeDlg(); } catch(e){ toast(e.message, true); }
   };
-  var ev0 = ev; // used by the Enter-key handler above
 }
-async function saveOneMark(btn, eventId){
-  const tr = btn.closest('tr'), chest = tr.dataset.chest;
-  const marks = {};
-  tr.querySelectorAll('input[data-c]').forEach(inp => { if (inp.value !== '') marks[inp.dataset.c] = Number(inp.value); });
-  if (!Object.keys(marks).length) return toast('Enter a mark first', true);
-  const body = marks._ !== undefined ? { overall: marks._ } : marks;
-  btn.disabled = true;
-  try { await api('saveMarks', { eventId, chest, marks: body }); toast('Mark saved'); const j = await api('judging', { eventId }); renderScoring(j); }
-  catch(e){ toast(e.message, true); btn.disabled = false; }
+async function removeEntry(eventId, chest){
+  if (!confirm('Remove #' + chest + ' from this event? Any marks you entered for them are deleted.')) return;
+  try {
+    const d = {}; dlg.querySelectorAll('#mtbl tbody tr').forEach(tr => { if (tr.dataset.chest !== chest) tr.querySelectorAll('input[data-c]').forEach(i => { if (i.value !== '') d[tr.dataset.chest + '|' + i.dataset.c] = i.value; }); });
+    await api('removeEntry', { eventId, chest }); renderScoring(await api('judging', { eventId }), d);
+  } catch(e){ toast(e.message, true); }
 }
 
 /* ====== RESULT EDITOR ====== */
@@ -1051,7 +1116,7 @@ function startLive(){
   S.token = t;
   if (me){
     S.me = me;
-    try { const d = JSON.parse(store.get('prt_data') || 'null'); if (d){ S.events = d.events; S.results = d.results; S.students = d.students || []; S.houses = d.houses || []; S.champs = d.champs || {}; S.certs = d.certs || {}; S.loaded = true; } } catch(e){}
+    try { const d = JSON.parse(store.get('prt_data') || 'null'); if (d){ S.events = d.events; S.results = d.results; S.students = d.students || []; S.houses = d.houses || []; S.champs = d.champs || {}; S.certs = d.certs || {}; S.batches = d.batches || []; S.loaded = true; } } catch(e){}
     showApp(); loadFirst(); return;
   }   // signed in: go straight to the app
   $('#splash').hidden = false;                            // signed in but profile not cached yet
