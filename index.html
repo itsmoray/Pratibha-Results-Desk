@@ -167,6 +167,36 @@ dialog h2{padding-right:40px}
   #toast{animation:up .2s ease-out}
 }
 @media(prefers-reduced-motion:reduce){.sk-l,.strip.loading i,#topbar,.spin,.btn:disabled::after{animation-duration:3s}}
+
+/* judging + roster + house board */
+.hint{font-size:13px;color:var(--muted);margin:2px 0 10px}
+.lookup{border:1.5px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:6px;font-size:14px;background:var(--paper)}
+.lookup.ok{border-color:var(--teal);color:var(--teal)}
+.lookup.bad{border-color:var(--danger);color:var(--danger)}
+.scoreTbl{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}
+.scoreTbl th,.scoreTbl td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:left;vertical-align:middle}
+.scoreTbl th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.02em}
+.scoreTbl input[type=number]{width:64px;margin:0;padding:6px 7px}
+.scoreTbl .who{font-weight:600}
+.scoreTbl .who small{display:block;color:var(--muted);font-weight:400}
+.rankTop1{background:var(--gold-soft)}
+.rankTop2{background:var(--teal-soft)}
+.rankTop3{background:#F1E4CF}
+.crit{display:flex;gap:6px;align-items:center;margin:0 0 8px}
+.crit input[type=text]{flex:1;margin:0}
+.crit input[type=number]{width:70px;margin:0}
+.crit button{flex:none}
+.houseRow{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.houseRow .rk{font-family:var(--head);font-weight:700;font-size:20px;color:var(--muted);width:28px;flex:none;text-align:center}
+.houseRow .nm{font-weight:700;flex:1;min-width:0}
+.houseRow .bar{height:8px;border-radius:5px;background:var(--line);overflow:hidden;margin-top:6px}
+.houseRow .bar i{display:block;height:100%;background:var(--gold)}
+.houseRow .pt{font-family:var(--head);font-weight:700;font-size:20px;flex:none}
+.houseRow.lead .bar i{background:var(--maroon)}
+.locked{opacity:.65}
+.tagRow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.tag{font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--paper);border:1px solid var(--line);color:var(--muted)}
+@media print{.top,.tabs,.controls,#toast,#topbar{display:none!important}body{background:#fff}.item{break-inside:avoid}.list{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -207,6 +237,10 @@ dialog h2{padding-right:40px}
   <main id="view" role="tabpanel"></main>
 </div>
 
+<section id="live" hidden style="min-height:100dvh;background:var(--maroon);color:#fff;padding:24px 16px">
+  <div style="max-width:760px;margin:0 auto"><h1 style="font-size:34px;color:#fff">Pratibha &middot; House Points</h1>
+  <p id="liveSub" style="opacity:.85;margin:6px 0 18px">Loading&hellip;</p><div id="liveList" style="color:var(--ink)"></div><div id="liveLatest" style="color:var(--ink)"></div></div>
+</section>
 <dialog id="dlg"></dialog>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 
@@ -216,7 +250,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwXZfCpI8nqu6qrWPVbdcbv
 const POLL_MS = 20000;
 
 /* ====== STATE + HELPERS ====== */
-const S = { token:'', me:null, events:[], results:{}, users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', q:'' };
+const S = { token:'', me:null, events:[], results:{}, students:[], houses:[], users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', q:'' };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store = {
@@ -261,7 +295,11 @@ const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
 const ACT = { login:'Signed in', loginFailed:'Failed sign-in', logout:'Signed out', changePassword:'Changed password',
   saveResult:'Saved result', createUser:'Created account', updateUser:'Updated account', deleteUser:'Deleted account',
-  addEvents:'Added events', updateEvent:'Edited event', deleteEvent:'Deleted event' };
+  addEvents:'Added events', updateEvent:'Edited event', deleteEvent:'Deleted event',
+  setCriteria:'Set judging criteria', addStudents:'Added roster students', updateStudent:'Edited student',
+  deleteStudent:'Deleted student', addEntry:'Added participant', removeEntry:'Removed participant',
+  saveMarks:'Saved marks', lockSubmission:'Submitted marks', unlockSubmission:'Unlocked marks',
+  declareFromMarks:'Declared result from marks', certStatus:'Certificate status', importOfficialEvents:'Loaded official event list' };
 const ACT_BAD = ['loginFailed', 'deleteUser', 'deleteEvent'];
 const actLabel = a => ACT[a] || a;
 function fmtLog(iso){
@@ -270,6 +308,18 @@ function fmtLog(iso){
 }
 const isDone = id => !!(S.results[id] && S.results[id].p1);
 const role = () => S.me ? S.me.role : '';
+const studentBy = chest => S.students.find(s => s.chest === String(chest || '').trim());
+const studentsDL = () => '<datalist id="studentsDL">' + S.students.map(s => `<option value="${esc(s.chest)}">${esc(s.name)}</option>`).join('') + '</datalist>';
+function lookupLine(chest){
+  const c = String(chest || '').trim();
+  if (!c) return '';
+  const s = studentBy(c);
+  return s ? `<div class="lookup ok">${esc(s.name)} — ${esc([s.cls, s.house].filter(Boolean).join(', '))}</div>`
+            : `<div class="lookup bad">No student with chest number "${esc(c)}" on the roster.</div>`;
+}
+function wireLookup(inputEl, lineEl){
+  inputEl.addEventListener('input', () => { lineEl.innerHTML = lookupLine(inputEl.value); });
+}
 const dlg = $('#dlg');
 function openDlg(html){
   dlg.innerHTML = '<button type="button" class="x" onclick="closeDlg()" aria-label="Close">×</button>' + html;
@@ -304,14 +354,14 @@ $('#loginForm').addEventListener('submit', async e => {
 
 let pollT;
 function endSession(msg){
-  S.token = ''; S.me = null; S.loaded = false; S.events = []; S.results = {}; S.users = []; S.usersLoaded = false; S.log = []; S.logLoaded = false; S.logErr = '';
+  S.token = ''; S.me = null; S.loaded = false; S.events = []; S.results = {}; S.students = []; S.houses = []; S.users = []; S.usersLoaded = false; S.log = []; S.logLoaded = false; S.logErr = '';
   store.del('prt_token'); store.del('prt_me'); store.del('prt_data'); clearInterval(pollT);
   closeDlg(); $('#splash').hidden = true; $('#app').hidden = true; $('#login').hidden = false;
   const er = $('#loginErr'); if (msg){ er.textContent = msg; er.hidden = false; } else er.hidden = true;
 }
 async function logout(){ try{ await api('logout'); }catch(e){} endSession(); }
 
-function paintWho(){ $('#who').innerHTML = esc(S.me.name || '') + '<br>' + esc(cap(S.me.role || '')); }
+function paintWho(){ $('#who').innerHTML = esc(S.me.name || '') + '<br>' + esc(S.me.role === 'viewer' ? 'Certificate committee' : cap(S.me.role || '')); }
 function showApp(){
   $('#login').hidden = true; $('#app').hidden = false;
   paintWho(); buildTabs(); paintProgress();
@@ -336,8 +386,10 @@ function retry(){ setTab(S.tab || tabsFor()[0][0]); loadFirst(); }
 async function refresh(){
   const j = await api('data', {}, S.loaded);
   const roleChanged = !S.me || S.me.role !== j.me.role;
-  S.events = j.events; S.results = j.results; S.loaded = true; S.me = j.me;
-  store.set('prt_me', JSON.stringify(j.me)); store.set('prt_data', JSON.stringify({ events:j.events, results:j.results })); paintWho();
+  S.events = j.events; S.results = j.results; S.students = j.students || []; S.houses = j.houses || []; S.champs = j.champs || {}; S.certs = j.certs || {}; S.loaded = true; S.me = j.me;
+  store.set('prt_me', JSON.stringify(j.me));
+  store.set('prt_data', JSON.stringify({ events:j.events, results:j.results, students:j.students, houses:j.houses, champs:j.champs, certs:j.certs }));
+  paintWho();
   if (roleChanged) buildTabs();
   paintProgress(); paint();
 }
@@ -359,8 +411,12 @@ function paintProgress(){
 /* ====== TABS ====== */
 function tabsFor(){
   const t = [];
-  if (role() === 'admin' || role() === 'faculty') t.push(['enter', role() === 'admin' ? 'All events' : 'My events']);
+  if (role() === 'judge') t.push(['score', 'Judge marks']);
+  if (role() === 'admin' || role() === 'faculty' || role() === 'committee') t.push(['enter', role() === 'admin' ? 'All events' : 'My events']);
   t.push(['board', 'Results']);
+  if (role() === 'admin' || role() === 'committee' || role() === 'viewer') t.push(['certs', 'Certificates']);
+  t.push(['house', 'House points']);
+  if (role() === 'admin' || role() === 'committee') t.push(['roster', 'Roster']);
   if (role() === 'admin'){ t.push(['users', 'Accounts']); t.push(['manage', 'Manage events']); t.push(['log', 'Activity']); }
   return t;
 }
@@ -378,10 +434,25 @@ async function setTab(k){
   if (k === 'enter'){
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search events" oninput="S.q=this.value;paint()">
       <div class="chips">${['all','pending','declared'].map(f => `<button class="chip" data-f="${f}" aria-pressed="${f==='all'}" onclick="setFilter('${f}')">${f[0].toUpperCase()+f.slice(1)}</button>`).join('')}</div></div><div id="list" class="list"></div>`;
+  } else if (k === 'score'){
+    v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search events" oninput="S.q=this.value;paint()">
+      <div class="chips">${['all','pending','declared'].map(f => `<button class="chip" data-f="${f}" aria-pressed="${f==='all'}" onclick="setFilter('${f}')">${f[0].toUpperCase()+f.slice(1)}</button>`).join('')}</div></div><div id="list" class="list"></div>`;
+  } else if (k === 'house'){
+    v.innerHTML = `<p class="meta" style="margin-bottom:12px">Updates automatically as results are declared. <a href="#live" target="_blank" rel="noopener">Open the big-screen live view</a> (needs no login).</p><div id="list"></div>`;
+  } else if (k === 'roster'){
+    v.innerHTML = `<details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Add students</summary>
+      <p class="meta">One student per line: Chest number | Name | Class | House | Gender (M or F)</p>
+      <textarea id="bulkStu" rows="5" placeholder="101 | Anjali Menon | S5 BCA | Shadjam | F"></textarea>
+      <div class="actions"><button type="button" class="btn ghost" id="addStuBtn" onclick="addStudentsBulk()">Add students</button></div></details>
+      <div class="controls"><input id="q" type="search" placeholder="Search roster" oninput="S.q=this.value;paint()"></div><div id="list" class="list"></div>`;
   } else if (k === 'board'){
-    const canX = role() === 'admin' || role() === 'committee';
+    const canX = role() === 'admin' || role() === 'committee' || role() === 'viewer';
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search declared results" oninput="S.q=this.value;paint()">
       ${canX ? '<button class="btn gold" onclick="exportXlsx()">Download Excel</button>' : ''}</div><div id="list" class="list"></div><p class="waiting" id="waiting"></p>`;
+  } else if (k === 'certs'){
+    v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search event or winner" oninput="S.q=this.value;paint()">
+      <button class="btn gold" onclick="exportCerts()">Download Excel</button><button class="btn ghost" onclick="window.print()">Print</button></div>
+      <p class="meta" style="margin-bottom:12px">Every declared winner with the details for announcements and certificates. New results appear here automatically, newest first.</p><div id="list" class="list"></div>`;
   } else if (k === 'users'){
     v.innerHTML = `<div class="bar"><button class="btn gold" onclick="openUser()">Add account</button></div><div id="list" class="list"></div>`;
     S.usersLoaded = S.users.length > 0; paint();
@@ -394,6 +465,8 @@ async function setTab(k){
       <label>Venue <input name="venue" list="venues" placeholder="Optional" autocomplete="off"></label>
       <datalist id="venues">${[...new Set(S.events.map(e => e.venue).filter(Boolean))].map(x => `<option value="${esc(x)}">`).join('')}</datalist>
       <div class="actions" style="margin-top:4px"><button class="btn gold" id="addOneBtn">Add event</button></div></form>
+      <div class="item" style="margin-bottom:14px"><h3>Official event list</h3><p class="meta" style="margin:4px 0 12px">Adds the 49 events from the guidelines (PAF 01 to 49) that are missing.</p>
+      <button type="button" class="btn ghost" onclick="importOfficial()">Load official event list</button></div>
       <details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Add many events at once</summary>
       <p class="meta">One event per line: Name | Category | Venue</p>
       <textarea id="bulk" rows="5" placeholder="Group Song | On-Stage Group | Main Auditorium"></textarea>
@@ -439,11 +512,38 @@ function paint(){
     }
     L.innerHTML = list.map(e => {
       const r = S.results[e.id];
-      return `<button class="item" onclick="openEditor('${e.id}')"><div class="row"><h3>${esc(e.name)}</h3>
+      const openFn = e.judged ? `openJudging('${e.id}')` : `openEditor('${e.id}')`;
+      return `<button class="item" onclick="${openFn}"><div class="row"><h3>${esc(e.name)}</h3>
         <span class="pill ${r ? 'done' : 'wait'}">${r ? 'Declared' : 'Pending'}</span></div>
         <div class="meta">${esc([e.category, e.venue].filter(Boolean).join(', '))}</div>
+        <div class="tagRow">${e.judged ? `<span class="tag">${plural(e.judgeCount,'judge')} · ${plural(e.entryCount,'entry')}</span>` : ''}${e.criteriaCount ? `<span class="tag">${plural(e.criteriaCount,'criterion')}</span>` : ''}</div>
         ${r ? `<div class="meta">1st: ${esc(r.p1)}</div>` : ''}</button>`;
     }).join('');
+  }
+  else if (S.tab === 'score'){
+    const list = S.events.filter(e => e.isJudge && match(e) &&
+      (S.filter === 'all' || (S.filter === 'declared') === isDone(e.id)));
+    if (!list.length){
+      const none = !S.events.some(e => e.isJudge);
+      L.innerHTML = `<div class="empty">${none ? 'No events are assigned to you for judging yet. Ask the admin to assign you.' : 'No events match.'}</div>`; return;
+    }
+    L.innerHTML = list.map(e => `<button class="item" onclick="openScoring('${e.id}')"><div class="row"><h3>${esc(e.name)}</h3>
+        <span class="pill ${isDone(e.id) ? 'done' : 'wait'}">${isDone(e.id) ? 'Declared' : 'Judging'}</span></div>
+        <div class="meta">${esc([e.category, e.venue].filter(Boolean).join(', '))}</div>
+        <div class="tagRow">${e.criteriaCount ? `<span class="tag">${plural(e.criteriaCount,'criterion')}</span>` : '<span class="tag">Overall mark</span>'}<span class="tag">${plural(e.entryCount,'entry')}</span></div></button>`).join('');
+  }
+  else if (S.tab === 'house'){
+    paintHouse(); return;
+  }
+  else if (S.tab === 'roster'){
+    const q = S.q.trim().toLowerCase();
+    const list = S.students.filter(s => !q || (s.chest + ' ' + s.name + ' ' + s.cls + ' ' + s.house).toLowerCase().includes(q));
+    L.innerHTML = list.length ? list.map(s => `<div class="item"><div class="row"><h3>${esc(s.name)}</h3>
+      <span class="pill wait">#${esc(s.chest)}</span></div>
+      <div class="meta">${esc([s.cls, s.house].filter(Boolean).join(', '))}</div>
+      <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openStudentEdit('${esc(s.chest)}')">Edit</button>
+      <button class="btn ghost small" onclick="delStudent('${esc(s.chest)}')">Delete</button></div></div>`).join('')
+      : '<div class="empty">No students on the roster yet. Add them above.</div>';
   }
   else if (S.tab === 'board'){
     const list = S.events.filter(e => isDone(e.id) && match(e))
@@ -459,10 +559,20 @@ function paint(){
     const pend = S.events.filter(e => !isDone(e.id));
     $('#waiting').textContent = pend.length ? 'Waiting for: ' + pend.map(e => e.name).join(', ') : 'All events declared.';
   }
+  else if (S.tab === 'certs'){
+    const q = S.q.trim().toLowerCase();
+    const rows = certRows().filter(x => !q || (x.event + ' ' + x.name + ' ' + x.house + ' ' + x.cls).toLowerCase().includes(q));
+    const by = {}; rows.forEach(x => (by[x.event] = by[x.event] || []).push(x));
+    const evs = Object.keys(by).sort((a, b) => (by[b][0].at || '').localeCompare(by[a][0].at || ''));
+    L.innerHTML = evs.length ? evs.map(n => `<div class="item"><div class="row"><h3>${esc(n)}</h3><span class="pill done">${esc(fmtTime(by[n][0].at))}</span></div>
+      <div class="meta">${esc(by[n][0].category)}${/short film/i.test(n) ? ' · One certificate for the Director and team' : ''}</div><ul class="win">${by[n].map(x => `<li><span class="pl">${x.place}</span><span class="n">${esc(x.name)}
+      <small>${esc([x.cls, x.house].filter(Boolean).join(', '))}${x.chest ? ' · #' + esc(x.chest) : ''}</small></span><button type="button" class="btn small ${x.status ? 'gold' : 'ghost'}" style="margin-left:auto;flex:none" onclick="cycleCert('${x.id}','${x.n}')">${x.status === 'collected' ? 'Collected ✓' : x.status === 'printed' ? 'Printed ✓' : 'Pending'}</button></li>`).join('')}</ul></div>`).join('')
+      : '<div class="empty">No declared results to show yet. They appear here as soon as they are entered.</div>';
+  }
   else if (S.tab === 'users'){
     L.innerHTML = S.users.length ? S.users.map(u => `<div class="item"><div class="row"><h3>${esc(u.name)}</h3>
       <span class="pill ${u.active ? 'done' : 'off'}">${u.active ? esc(cap(u.role)) : 'Disabled'}</span></div>
-      <div class="meta">${esc(u.email)}${u.role === 'faculty' ? ', ' + (u.events === 'ALL' ? 'all events' : plural(u.events ? u.events.split(',').length : 0, 'event')) : ''}</div>
+      <div class="meta">${esc(u.email)}${(u.role === 'faculty' || u.role === 'judge') ? ', ' + (u.events === 'ALL' ? 'all events' : plural(u.events ? u.events.split(',').length : 0, 'event')) : ''}</div>
       <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openUser('${esc(u.email)}')">Edit</button>
       ${u.email === S.me.email ? '' : `<button class="btn ghost small" onclick="delUser('${esc(u.email)}')">Delete</button>`}</div></div>`).join('')
       : '<div class="empty">No accounts yet.</div>';
@@ -492,24 +602,181 @@ function paint(){
   }
 }
 
+/* ====== HOUSE POINTS ====== */
+function paintHouse(){
+  const L = $('#list'); if (!L) return;
+  const top = S.houses.length ? S.houses[0].points : 0;
+  L.innerHTML = S.houses.length ? S.houses.map((h, i) => `<div class="houseRow${i===0 && h.points>0 ? ' lead' : ''}">
+    <div class="rk">${i+1}</div>
+    <div class="nm">${esc(h.house)}<div class="bar"><i style="width:${top ? Math.round(h.points/top*100) : 0}%"></i></div></div>
+    <div class="pt">${h.points}</div></div>`).join('') : '<div class="empty">No houses yet.</div>';
+  const C = S.champs || {}, T = C.titles || {};
+  const block = (list, title, sub) => `<h2 style="margin:22px 0 4px;font-size:22px">${esc(title)}</h2><p class="meta" style="margin-bottom:12px">${esc(sub)}</p>` +
+    (list && list.length ? list.map((c, i) => `<div class="houseRow${i === 0 ? ' lead' : ''}"><div class="rk">${i + 1}</div>
+      <div class="nm">${esc(c.name)}<div class="meta">#${esc(c.chest)} · ${esc([c.cls, c.house].filter(Boolean).join(', '))}${c.firsts ? ' · 1st place ×' + c.firsts : ''}</div></div>
+      <div class="pt">${c.points}</div></div>`).join('') : '<div class="empty">No points yet. They appear once results are declared with chest numbers.</div>');
+  const note = 'Individual events only, group items not counted. Ties go to the most 1st places.';
+  L.innerHTML += block(C.F, T.F || 'Girls', note) + block(C.M, T.M || 'Boys', note) +
+    (C.U && C.U.length ? block(C.U, 'Gender not set on roster', 'These students have points but no gender on the roster, so they are in neither title. Set it under Roster → Edit.') : '');
+}
+
+/* ====== ROSTER (Students) ====== */
+async function addStudentsBulk(){
+  const items = $('#bulkStu').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const p = l.split('|').map(x => x.trim()); return { chest:p[0], name:p[1] || '', cls:p[2] || '', house:p[3] || '', gender:p[4] || '' };
+  });
+  if (!items.length) return toast('Type at least one student first', true);
+  const b = $('#addStuBtn'); b.disabled = true;
+  try { const j = await api('addStudents', { items }); $('#bulkStu').value = ''; toast(plural(j.added,'student') + ' added, ' + j.updated + ' updated' + (j.unknownHouse ? '. ' + plural(j.unknownHouse,'student') + ' with a house that is not one of the seven' : ''), !!j.unknownHouse); await refresh(); }
+  catch(e){ toast(e.message, true); }
+  b.disabled = false;
+}
+function openStudentEdit(chest){
+  const s = studentBy(chest);
+  openDlg(`<h2>Edit student</h2><p class="sub">Chest number #${esc(chest)}</p><div class="err" id="fe" hidden></div>
+  <form id="sf"><label>Name <input name="name" value="${esc(s.name)}" required></label>
+  <label>Class <input name="cls" value="${esc(s.cls)}"></label>
+  <label>House <input name="house" value="${esc(s.house)}" list="houseDL"></label>
+  <label>Gender <select name="gender"><option value="">Not set</option><option value="F" ${s.gender === 'F' ? 'selected' : ''}>Female</option><option value="M" ${s.gender === 'M' ? 'selected' : ''}>Male</option></select></label>
+  <datalist id="houseDL">${HOUSES_UI.map(h => `<option value="${esc(h)}">`).join('')}</datalist>
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">Save changes</button></div></form>`);
+  $('#sf').addEventListener('submit', async ev => {
+    ev.preventDefault(); const f = ev.target, b = $('#sb'), er = $('#fe'); er.hidden = true; b.disabled = true;
+    try { await api('updateStudent', { chest, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value }); closeDlg(); toast('Student updated'); await refresh(); }
+    catch(err){ er.textContent = err.message; er.hidden = false; b.disabled = false; }
+  });
+}
+async function delStudent(chest){
+  const s = studentBy(chest);
+  if (!await confirmBox('Delete student?', (s ? s.name : chest) + ' will be removed from the roster.', 'Delete student')) return;
+  try { await api('deleteStudent', { chest }); toast('Student deleted'); await refresh(); } catch(e){ toast(e.message, true); }
+}
+const HOUSES_UI = ['Shadjam','Rishabham','Gandharam','Madhyamam','Panchamam','Dhaivatam','Nishadam'];
+
+/* ====== JUDGING (admin/committee review + declare) ====== */
+async function openJudging(id){
+  openDlg(`<h2>Loading…</h2><div class="sk-l w60"></div><div class="sk-l w40"></div>`);
+  let j;
+  try { j = await api('judging', { eventId:id }); } catch(e){ closeDlg(); return toast(e.message, true); }
+  renderJudging(j);
+}
+function renderJudging(j){
+  const ev = j.event, crit = j.criteria; S.lastJ = j;
+  const overBanner = (j.overLimit || []).map(o => `<p class="err">${esc(o.house)} has ${o.count} entries in this event. The limit is ${o.limit} per house.</p>`).join('') + (j.warnings || []).map(w => `<p class="err">${esc(w)}</p>`).join('');
+  const cols = crit.length ? crit.map(c => `<th>${esc(c.name)}<br><small>/${c.max}</small></th>`).join('') : '<th>Mark</th>';
+  const rows = j.entries.map((r, i) => {
+    const cells = j.judges.map(jg => `<td>${r.perJudge[jg.email] === null ? '—' : r.perJudge[jg.email]}${jg.locked ? '' : ' <small>(draft)</small>'}</td>`).join('');
+    const cls = r.rank === 1 ? 'rankTop1' : r.rank === 2 ? 'rankTop2' : r.rank === 3 ? 'rankTop3' : '';
+    return `<tr class="${cls}"><td class="who">${esc(r.name)}<small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small></td>
+      ${cells}<td><b>${r.avg === null ? '—' : r.avg}</b></td><td>${r.rank ?? '—'}</td></tr>`;
+  }).join('');
+  const judgeHeads = j.judges.map(jg => `<th>${esc(jg.name)}${jg.locked ? (role() === 'admin' ? `<br><button type="button" class="btn ghost small" onclick="unlockJudge('${ev.id}','${esc(jg.email)}')">Unlock</button>` : '') : ' <small>(entering)</small>'}</th>`).join('');
+  const body = j.entries.length ? `<div style="overflow-x:auto"><table class="scoreTbl"><thead><tr><th>Participant</th>${judgeHeads}<th>Average</th><th>Rank</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : '<div class="empty">No participants scored yet.</div>';
+  const noJudges = !j.judges.length ? '<p class="err">No judges are assigned to this event yet — add a judge account under Accounts.</p>' : '';
+  openDlg(`<h2>${esc(ev.name)}</h2><p class="sub">${plural(j.judges.length,'judge')} · worth ${ev.ptsFirst}/${ev.ptsSecond}/${ev.ptsThird} house points for 1st/2nd/3rd${crit.length ? ' · ' + plural(crit.length,'criterion') : ''}</p>
+  ${noJudges}${overBanner}${body}
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Close</button>
+  <button type="button" class="btn ghost" onclick="printSheet()">Score sheet (PDF)</button>
+  <button type="button" class="btn ghost" onclick="openEditor('${ev.id}')">Enter manually instead</button>
+  <button type="button" class="btn gold" id="declBtn" ${j.entries.filter(r=>r.avg!==null).length ? '' : 'disabled'}>Declare top 3</button></div>`);
+  $('#declBtn').onclick = async () => {
+    const b = $('#declBtn'); b.disabled = true; b.textContent = 'Declaring…';
+    try { await api('declareFromMarks', { eventId: ev.id }); closeDlg(); toast('Result declared'); await refresh(); }
+    catch(e){ toast(e.message, true); b.disabled = false; b.textContent = 'Declare top 3'; }
+  };
+}
+
+async function unlockJudge(eventId, judge){
+  if (!await confirmBox('Unlock marks?', 'This judge will be able to change their marks again.', 'Unlock')) return;
+  try { await api('unlockSubmission', { eventId, judge }); toast('Unlocked'); openJudging(eventId); } catch(e){ toast(e.message, true); }
+}
+
+/* ====== JUDGING (judge's own scoring screen) ====== */
+async function openScoring(id){
+  openDlg(`<h2>Loading…</h2><div class="sk-l w60"></div><div class="sk-l w40"></div>`);
+  let j;
+  try { j = await api('judging', { eventId:id }); } catch(e){ closeDlg(); return toast(e.message, true); }
+  renderScoring(j);
+}
+function renderScoring(j){
+  const ev = j.event, crit = j.criteria;
+  const me = j.judges.find(jg => jg.email === S.me.email) || { locked:false };
+  const rows = j.entries.map(r => {
+    const mine = r.perJudge[S.me.email];
+    const inputs = crit.length
+      ? crit.map(c => `<input type="number" min="0" max="${c.max}" step="any" data-c="${c.id}" value="${(r.mineCrit || {})[c.id] ?? ''}" placeholder="/${c.max}">`).join(' ')
+      : `<input type="number" min="0" max="${ev.maxMark}" step="any" data-c="_" value="${(r.mineCrit || {})._ ?? ''}" placeholder="/${ev.maxMark}">`;
+    return `<tr data-chest="${esc(r.chest)}"><td class="who">${esc(r.name)}<small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small></td>
+      <td>${inputs}</td><td><button type="button" class="btn ghost small" onclick="saveOneMark(this,'${ev.id}')">Save</button></td>
+      <td>${mine === null || mine === undefined ? '—' : mine}</td></tr>`;
+  }).join('');
+  const body = j.entries.length ? `<div style="overflow-x:auto"><table class="scoreTbl"><thead><tr><th>Participant</th><th>Marks</th><th></th><th>Your last saved mark</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : '<p class="hint">No participants yet — add the first one below.</p>';
+  openDlg(`<h2>${esc(ev.name)}</h2><p class="sub">${crit.length ? crit.map(c => c.name + ' /' + c.max).join(', ') : 'Overall mark out of ' + ev.maxMark}</p>
+  ${me.locked ? '<p class="err">You have submitted your marks for this event. Ask an admin to unlock them if you need to change something.</p>' : ''}
+  <div class="${me.locked ? 'locked' : ''}" id="scoreBody">${body}
+  <div class="fld"><span>Add a participant</span><input id="addChest" placeholder="Type chest number" list="studentsDL" autocomplete="off">
+  <div id="addLine"></div></div>${studentsDL()}</div>
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Close</button>
+  ${me.locked ? '' : `<button type="button" class="btn gold" id="lockBtn">Submit final marks</button>`}</div>`);
+  wireLookup($('#addChest'), $('#addLine'));
+  $('#addChest').addEventListener('keydown', async ev => {
+    if (ev.key !== 'Enter') return; ev.preventDefault();
+    const chest = ev.target.value.trim(); if (!chest) return;
+    if (!studentBy(chest)){ $('#addLine').innerHTML = lookupLine(chest); return; }
+    try { const ar = await api('addEntry', { eventId:ev0.id, chest }); toast(ar.warn || 'Participant added', !!ar.warn); const jj = await api('judging', { eventId:ev0.id }); renderScoring(jj); }
+    catch(err){ toast(err.message, true); }
+  });
+  const lockBtn = $('#lockBtn');
+  if (lockBtn) lockBtn.onclick = async () => {
+    if (!await confirmBox('Submit final marks?', 'You will not be able to change your marks for this event afterwards unless an admin unlocks them.', 'Submit')) return;
+    try { await api('lockSubmission', { eventId: ev.id }); toast('Marks submitted'); closeDlg(); } catch(e){ toast(e.message, true); }
+  };
+  var ev0 = ev; // used by the Enter-key handler above
+}
+async function saveOneMark(btn, eventId){
+  const tr = btn.closest('tr'), chest = tr.dataset.chest;
+  const marks = {};
+  tr.querySelectorAll('input[data-c]').forEach(inp => { if (inp.value !== '') marks[inp.dataset.c] = Number(inp.value); });
+  if (!Object.keys(marks).length) return toast('Enter a mark first', true);
+  const body = marks._ !== undefined ? { overall: marks._ } : marks;
+  btn.disabled = true;
+  try { await api('saveMarks', { eventId, chest, marks: body }); toast('Mark saved'); const j = await api('judging', { eventId }); renderScoring(j); }
+  catch(e){ toast(e.message, true); btn.disabled = false; }
+}
+
 /* ====== RESULT EDITOR ====== */
 function openEditor(id){
   const e = S.events.find(x => x.id === id), r = S.results[id] || {};
   const rows = [['1st place','1'],['2nd place','2'],['3rd place','3'],['Runner-up','4']];
   openDlg(`<h2>${esc(e.name)}</h2><p class="sub">${esc([e.category, e.venue].filter(Boolean).join(', '))}${r.at ? ' · last saved ' + esc(fmtTime(r.at)) : ''}</p>
+  <p class="hint">Chest number is optional but fills in the class automatically and lets this placement count toward house points.</p>
   <div class="err" id="fe" hidden></div>
   <form id="rf">${rows.map(([l,n]) => `<fieldset><legend>${l}</legend>
+    <input name="chest${n}" placeholder="Chest number (optional)" value="${esc(r['x'+n])}" autocomplete="off" data-chest="${n}" list="studentsDL">
+    <div class="lookup ${r['x'+n] ? (studentBy(r['x'+n]) ? 'ok' : 'bad') : ''}" id="lk${n}">${lookupLine(r['x'+n])}</div>
     <input name="p${n}" placeholder="Winner or team name${n==='1' ? ' (required)' : ''}" value="${esc(r['p'+n])}" ${n==='1' ? 'required' : ''} autocomplete="off">
     <input name="c${n}" placeholder="Class or department" value="${esc(r['c'+n])}" autocomplete="off"></fieldset>`).join('')}
   <label>Notes <textarea name="notes" rows="2" placeholder="Optional">${esc(r.notes)}</textarea></label>
+  ${studentsDL()}
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">Save result</button></div></form>`);
-  $('#rf').addEventListener('submit', async ev => {
+  const f = $('#rf');
+  [1,2,3,4].forEach(n => {
+    const inp = f.querySelector(`[data-chest="${n}"]`), line = $('#lk' + n);
+    inp.addEventListener('input', () => {
+      line.innerHTML = lookupLine(inp.value);
+      const s = studentBy(inp.value);
+      if (s && !f['p'+n].value) f['p'+n].value = s.name;
+      if (s) f['c'+n].value = s.cls;
+    });
+  });
+  f.addEventListener('submit', async ev => {
     ev.preventDefault();
     const fd = Object.fromEntries(new FormData(ev.target)), b = $('#sb'), er = $('#fe');
     er.hidden = true; b.disabled = true; b.textContent = 'Saving…';
     try {
       await api('saveResult', { eventId:id, result:fd });
-      S.results[id] = { ...fd, by:S.me.email, at:new Date().toISOString() };
       closeDlg(); toast('Result saved'); paintProgress(); paint();
       refresh().catch(() => {});
     }
@@ -544,18 +811,18 @@ function openUser(email){
   <form id="uf">
   ${u ? '' : '<label>Email <input name="email" type="email" inputmode="email" placeholder="name@example.com" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" required></label>'}
   <label>Full name <input name="name" value="${esc(u ? u.name : '')}" required></label>
-  <label>Role <select name="role" id="ur"><option value="faculty">Faculty (enters results)</option><option value="committee">Committee (views results)</option><option value="admin">Admin (full access)</option></select></label>
+  <label>Role <select name="role" id="ur"><option value="faculty">Faculty (enters results)</option><option value="judge">Judge (enters marks only)</option><option value="viewer">Certificate committee (view only)</option><option value="committee">Committee (declares results, manages roster)</option><option value="admin">Admin (full access)</option></select></label>
   <label>${u ? 'New password (leave empty to keep)' : 'Password'}
     <span class="inline"><input name="password" id="upw" autocomplete="new-password" ${u ? '' : 'required'} minlength="6"><button type="button" class="btn ghost small" onclick="$('#upw').value=genPw()">Generate</button></span></label>
   ${u ? `<label style="display:flex;gap:10px;align-items:center;font-weight:500"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> Account active</label>` : ''}
-  <div class="fld" id="evbox" role="group" aria-labelledby="evt"><span id="evt">Events this faculty can enter</span>
+  <div class="fld" id="evbox" role="group" aria-labelledby="evt"><span id="evt">Events this account is assigned to (entering results, or judging marks)</span>
     <div class="checks" id="evl">
       <label><input type="checkbox" id="all" ${sel === 'ALL' ? 'checked' : ''}> All events</label>
       ${S.events.map(e => `<label><input type="checkbox" class="ev" value="${e.id}" ${sel !== 'ALL' && sel.includes(e.id) ? 'checked' : ''} ${sel === 'ALL' ? 'disabled' : ''}> ${esc(e.name)}</label>`).join('')}
     </div></div>
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">${u ? 'Save changes' : 'Create account'}</button></div></form>`);
   const f = $('#uf'); f.role.value = u ? u.role : 'faculty';
-  const sync = () => { $('#evbox').hidden = f.role.value !== 'faculty'; };
+  const sync = () => { $('#evbox').hidden = f.role.value !== 'faculty' && f.role.value !== 'judge'; };
   f.role.addEventListener('change', sync); sync();
   $('#all').addEventListener('change', e => document.querySelectorAll('.ev').forEach(c => { c.disabled = e.target.checked; }));
   f.addEventListener('submit', async ev => {
@@ -597,7 +864,7 @@ async function delUser(em){
 }
 
 /* ====== EVENTS (admin) ====== */
-const CATS = ['Off-Stage', 'On-Stage Individual', 'On-Stage Group'];
+const CATS = ['Off-Stage', 'Off-Stage Group', 'On-Stage Individual', 'On-Stage Group'];
 function catField(cur){
   const known = !cur || CATS.includes(cur);
   return `<label>Category <select name="cat" onchange="this.form.other.hidden = this.value !== '__other'">
@@ -630,17 +897,107 @@ function openEventEdit(id){
   <form id="ef"><label>Event name <input name="name" value="${esc(e.name)}" required></label>
   ${catField(e.category)}
   <label>Venue <input name="venue" value="${esc(e.venue)}"></label>
+  <fieldset><legend>Judging</legend>
+  <label>Max mark per judge (used when there are no criteria) <input name="maxMark" type="number" min="1" value="${e.maxMark}"></label>
+  <div class="inline"><label style="flex:1">1st house points <input name="ptsFirst" type="number" min="0" value="${e.ptsFirst}"></label>
+  <label style="flex:1">2nd <input name="ptsSecond" type="number" min="0" value="${e.ptsSecond}"></label>
+  <label style="flex:1">3rd <input name="ptsThird" type="number" min="0" value="${e.ptsThird}"></label></div>
+  <button type="button" class="btn ghost small" onclick="openCriteria('${e.id}')">Manage judging criteria${e.criteriaCount ? ' (' + e.criteriaCount + ')' : ''}</button></fieldset>
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">Save changes</button></div></form>`);
   $('#ef').addEventListener('submit', async ev => {
     ev.preventDefault(); const f = ev.target, b = $('#sb'); b.disabled = true;
-    try { await api('updateEvent', { id, name:f.name.value, category:readCat(f), venue:f.venue.value }); closeDlg(); toast('Event updated'); await refresh(); }
+    try {
+      await api('updateEvent', { id, name:f.name.value, category:readCat(f), venue:f.venue.value,
+        maxMark:f.maxMark.value, ptsFirst:f.ptsFirst.value, ptsSecond:f.ptsSecond.value, ptsThird:f.ptsThird.value });
+      closeDlg(); toast('Event updated'); await refresh();
+    }
     catch(err){ $('#fe').textContent = err.message; $('#fe').hidden = false; b.disabled = false; }
   });
+}
+
+/* ====== JUDGING CRITERIA (admin) ====== */
+function critRow(name, max){
+  return `<div class="crit"><input type="text" placeholder="Criterion name" value="${esc(name||'')}">
+    <input type="number" min="1" placeholder="Max" value="${max||''}">
+    <button type="button" class="btn ghost small" onclick="this.closest('.crit').remove()">Remove</button></div>`;
+}
+async function openCriteria(id){
+  openDlg(`<h2>Loading…</h2><div class="sk-l w60"></div>`);
+  let j;
+  try { j = await api('judging', { eventId:id }); } catch(e){ closeDlg(); return toast(e.message, true); }
+  openDlg(`<h2>Judging criteria</h2><p class="sub">${esc(j.event.name)} — leave empty for a single overall mark out of ${j.event.maxMark} per judge.</p>
+  <div class="err" id="fe" hidden></div>
+  <div id="critList">${j.criteria.length ? j.criteria.map(c => critRow(c.name, c.max)).join('') : ''}</div>
+  <button type="button" class="btn ghost small" style="margin-bottom:14px" onclick="$('#critList').insertAdjacentHTML('beforeend', critRow())">Add criterion</button>
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button type="button" class="btn gold" id="sb">Save criteria</button></div>`);
+  $('#sb').onclick = async () => {
+    const items = [...document.querySelectorAll('#critList .crit')].map(row => {
+      const [nameInp, maxInp] = row.querySelectorAll('input');
+      return { name: nameInp.value.trim(), max: Number(maxInp.value) };
+    }).filter(x => x.name && x.max);
+    const b = $('#sb'); b.disabled = true;
+    try { await api('setCriteria', { eventId:id, items }); closeDlg(); toast('Criteria saved'); await refresh(); }
+    catch(e){ toast(e.message, true); b.disabled = false; }
+  };
+}
+async function importOfficial(){
+  if (!await confirmBox('Load the official event list?', 'Adds the events from the guidelines that are missing. Elocution, essays, poems, stories and recitation get one event per language. Old general events like "Elocution" or "Essay Writing" are removed only if they have no results or marks yet. Classical and folk dance get their judging criteria from the rules (10 marks each, editable).', 'Load events')) return;
+  try { const j = await api('importOfficialEvents'); toast(j.added + ' events added, ' + j.removed + ' old removed'); await refresh(); }
+  catch(e){ toast(e.message, true); }
 }
 async function delEvent(id){
   const e = S.events.find(x => x.id === id);
   if (!await confirmBox('Delete event?', e.name + ' and any saved winners for it will be removed.', 'Delete event')) return;
   try { await api('deleteEvent', { id }); toast('Event deleted'); await refresh(); } catch(err){ toast(err.message, true); }
+}
+
+async function cycleCert(id, n){
+  const k = id + '|' + n, cur = S.certs[k] || '', nxt = cur === '' ? 'printed' : cur === 'printed' ? 'collected' : '';
+  S.certs[k] = nxt; paint();
+  try { await api('setCertStatus', { eventId:id, place:n, status:nxt }, true); }
+  catch(e){ S.certs[k] = cur; paint(); toast(e.message, true); }
+}
+
+/* ====== SCORE SHEET (print / save as PDF) ====== */
+function printSheet(){
+  const j = S.lastJ; if (!j) return;
+  const cr = j.criteria, ev = j.event;
+  const cell = (r, jg) => {
+    const t = r.perJudge[jg.email]; if (t === null || t === undefined) return '—';
+    const by = (r.perCrit || {})[jg.email] || {};
+    return (cr.length ? cr.map(c => by[c.id] ?? '–').join(' + ') + ' = ' : '') + '<b>' + t + '</b>';
+  };
+  const w = window.open('', '_blank'); if (!w) return toast('Allow pop-ups to print the score sheet', true);
+  w.document.write(`<!doctype html><title>${esc(ev.name)} score sheet</title>
+  <style>body{font:14px system-ui,sans-serif;margin:24px;color:#000}table{border-collapse:collapse;width:100%;margin-top:12px}th,td{border:1px solid #888;padding:6px 8px;text-align:left;vertical-align:top}small{color:#555}.sig{display:flex;gap:40px;margin-top:70px}.sig div{flex:1;border-top:1px solid #000;padding-top:4px}</style>
+  <h2 style="margin:0">Pratibha 2026-27 · ${esc(ev.name)}</h2>
+  <p>${cr.length ? 'Criteria: ' + cr.map(c => esc(c.name) + ' /' + c.max).join(', ') : 'Overall mark out of ' + ev.maxMark}<br>Average of ${plural(j.judges.length, 'judge')} · printed ${esc(new Date().toLocaleString())}</p>
+  <table><tr><th>Rank</th><th>Participant</th>${j.judges.map(g => `<th>${esc(g.name)}</th>`).join('')}<th>Average</th></tr>
+  ${j.entries.map(r => `<tr><td>${r.rank ?? '—'}</td><td>${esc(r.name)}<br><small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small></td>${j.judges.map(g => `<td>${cell(r, g)}</td>`).join('')}<td><b>${r.avg ?? '—'}</b></td></tr>`).join('')}</table>
+  <div class="sig">${j.judges.map(g => `<div>${esc(g.name)}<br><small>Judge signature</small></div>`).join('')}</div>
+  <script>onload = () => print()<\/script>`);
+  w.document.close();
+}
+
+/* ====== CERTIFICATES ====== */
+function certRows(){
+  const out = [];
+  S.events.filter(e => isDone(e.id)).forEach(e => {
+    const r = S.results[e.id];
+    [['1st','1'],['2nd','2'],['3rd','3'],['Runner-up','4']].forEach(([place, n]) => {
+      if (!r['p'+n]) return;
+      const s = studentBy(r['x'+n]);
+      out.push({ id:e.id, n, status:(S.certs || {})[e.id + '|' + n] || '', event:e.name, category:e.category, place, name:r['p'+n], cls:r['c'+n] || (s ? s.cls : ''), house:s ? s.house : '', chest:r['x'+n] || '', at:r.at });
+    });
+  });
+  return out;
+}
+async function exportCerts(){
+  try { await loadXlsx(); } catch(e){ return toast(e.message, true); }
+  const rows = certRows().map(x => ({ 'Event':x.event, 'Category':x.category, 'Position':x.place, 'Name':x.name, 'Class':x.cls, 'House':x.house, 'Chest no.':x.chest, 'Certificate':x.status || 'pending' }));
+  if (!rows.length) return toast('No declared results yet', true);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Certificates');
+  XLSX.writeFile(wb, 'Pratibha_Certificates.xlsx');
 }
 
 /* ====== EXPORT ====== */
@@ -664,18 +1021,37 @@ async function exportXlsx(){
   });
   const ws = XLSX.utils.json_to_sheet(rows), wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Results');
+  const houseRows = S.houses.map((h, i) => ({ 'Rank':i+1, 'House':h.house, 'Points':h.points }));
+  if (houseRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(houseRows), 'House Points');
+  const CH = S.champs || {}, CT = CH.titles || {};
+  const champRows = [['F', CT.F || 'Girls'], ['M', CT.M || 'Boys'], ['U', 'Gender not set']].flatMap(([k, t]) => (CH[k] || []).map((c, i) => ({ 'Title':t, 'Rank':i+1, 'Chest':c.chest, 'Name':c.name, 'Class':c.cls, 'House':c.house, 'Points':c.points, '1st places':c.firsts })));
+  if (champRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(champRows), 'Individual Championship');
   XLSX.writeFile(wb, 'Pratibha_Results.xlsx');
 }
 
 /* ====== BOOT ====== */
+function startLive(){
+  $('#live').hidden = false; document.title = 'Pratibha House Points';
+  const go = async () => {
+    try {
+      const j = await api('publicHouses', {}, true), top = Math.max(1, ...j.houses.map(h => h.points));
+      $('#liveList').innerHTML = j.houses.map((h, i) => `<div class="houseRow${i === 0 && h.points > 0 ? ' lead' : ''}"><div class="rk">${i + 1}</div>
+        <div class="nm">${esc(h.house)}<div class="bar"><i style="width:${Math.round(h.points / top * 100)}%"></i></div></div><div class="pt">${h.points}</div></div>`).join('');
+      $('#liveLatest').innerHTML = (j.latest || []).length ? '<h2 style="color:#fff;margin:26px 0 10px">Latest results</h2>' + j.latest.map(r => `<div class="item" style="margin-bottom:8px"><h3>${esc(r.event)}</h3><ul class="win">${r.winners.map(w => `<li><span class="pl">${['1st','2nd','3rd'][w.place - 1]}</span><span class="n">${esc(w.name)}${w.house ? `<small>${esc(w.house)}</small>` : ''}</span></li>`).join('')}</ul></div>`).join('') : '';
+      $('#liveSub').textContent = j.declared + ' of ' + j.total + ' events declared · updated ' + new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+    } catch(e){}
+  };
+  go(); setInterval(go, 10000);
+}
 (function(){
+  if (location.hash === '#live'){ startLive(); return; }
   const t = store.get('prt_token'); let me = null;
   try { me = JSON.parse(store.get('prt_me') || 'null'); } catch(e){}
   if (!t){ $('#login').hidden = false; return; }          // never signed in: show login
   S.token = t;
   if (me){
     S.me = me;
-    try { const d = JSON.parse(store.get('prt_data') || 'null'); if (d){ S.events = d.events; S.results = d.results; S.loaded = true; } } catch(e){}
+    try { const d = JSON.parse(store.get('prt_data') || 'null'); if (d){ S.events = d.events; S.results = d.results; S.students = d.students || []; S.houses = d.houses || []; S.champs = d.champs || {}; S.certs = d.certs || {}; S.loaded = true; } } catch(e){}
     showApp(); loadFirst(); return;
   }   // signed in: go straight to the app
   $('#splash').hidden = false;                            // signed in but profile not cached yet
