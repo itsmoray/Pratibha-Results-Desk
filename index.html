@@ -476,6 +476,15 @@ async function api(action, payload = {}, silent){
         raw = await res.text();
         j = JSON.parse(raw);
         lastErr = null;
+        // A BUSY reply means the server itself is fine — it just lost a race for the same
+        // resource lock (e.g. two judges saving the same event at once) and asked us to
+        // retry. That's not a dropped connection, but it's just as safe to retry quietly:
+        // treat it the same as a network hiccup instead of surfacing it as an error.
+        if (!j.ok && j.code === 'BUSY' && attempt < 2){
+          if (!silent) $('#loadPillText').textContent = 'Busy, retrying…';
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1) + Math.floor(Math.random() * 300)));
+          continue;
+        }
         break;
       } catch(e){
         lastErr = e;
