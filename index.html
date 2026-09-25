@@ -398,7 +398,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwXZfCpI8nqu6qrWPVbdcbv
 const POLL_MS = 30000;
 
 /* ====== STATE + HELPERS ====== */
-const S = { token:'', me:null, events:[], results:{}, students:[], houses:[], users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', q:'', rsort:'chest' };
+const S = { token:'', me:null, events:[], results:{}, students:[], studentsVer:'', houses:[], users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', q:'', rsort:'chest' };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store = {
@@ -577,7 +577,7 @@ $('#loginForm').addEventListener('submit', async e => {
 
 let pollT;
 function endSession(msg){
-  S.token = ''; S.me = null; S.loaded = false; S.events = []; S.results = {}; S.students = []; S.houses = []; S.users = []; S.usersLoaded = false; S.log = []; S.logLoaded = false; S.logErr = '';
+  S.token = ''; S.me = null; S.loaded = false; S.events = []; S.results = {}; S.students = []; S.studentsVer = ''; S.houses = []; S.users = []; S.usersLoaded = false; S.log = []; S.logLoaded = false; S.logErr = '';
   store.del('prt_token'); store.del('prt_me'); store.del('prt_data'); clearInterval(pollT);
   closeDlg(); $('#splash').hidden = true; $('#app').hidden = true; $('#login').hidden = false;
   const er = $('#loginErr'); if (msg){ er.textContent = msg; er.hidden = false; } else er.hidden = true;
@@ -607,12 +607,15 @@ function showRetry(msg){
 function retry(){ setTab(S.tab || tabsFor()[0][0]); loadFirst(); }
 
 async function refresh(){
-  const j = await api('data', { since: S.loaded ? S.ver : '' }, S.loaded);
+  const j = await api('data', { since: S.loaded ? S.ver : '', sinceStudents: S.loaded ? S.studentsVer : '' }, S.loaded);
   if (j.unchanged) return;   // nothing changed on the server: skip the download and the repaint
   const roleChanged = !S.me || S.me.role !== j.me.role;
-  S.events = j.events; S.results = j.results; S.students = j.students || []; S.houses = j.houses || []; S.champs = j.champs || {}; S.certs = j.certs || {}; S.batches = j.batches || []; S.ver = j.ver || ''; S.loaded = true; S.me = j.me;
+  // The server omits `students` (usually the biggest part of the payload) when the roster hasn't
+  // changed since our last studentsVer, so keep what we already have in that case.
+  if (j.students) S.students = j.students;
+  S.events = j.events; S.results = j.results; S.houses = j.houses || []; S.champs = j.champs || {}; S.certs = j.certs || {}; S.batches = j.batches || []; S.ver = j.ver || ''; S.studentsVer = j.studentsVer || S.studentsVer; S.loaded = true; S.me = j.me;
   store.set('prt_me', JSON.stringify(j.me));
-  store.set('prt_data', JSON.stringify({ events:j.events, results:j.results, students:j.students, houses:j.houses, champs:j.champs, certs:j.certs, batches:j.batches, ver:j.ver }));
+  store.set('prt_data', JSON.stringify({ events:j.events, results:j.results, students:S.students, houses:j.houses, champs:j.champs, certs:j.certs, batches:j.batches, ver:j.ver, studentsVer:S.studentsVer }));
   paintWho();
   if (roleChanged) buildTabs();
   paintProgress(); paint();
@@ -1532,7 +1535,7 @@ function startLive(){
   S.token = t;
   if (me){
     S.me = me;
-    try { const d = JSON.parse(store.get('prt_data') || 'null'); if (d){ S.events = d.events; S.results = d.results; S.students = d.students || []; S.houses = d.houses || []; S.champs = d.champs || {}; S.certs = d.certs || {}; S.batches = d.batches || []; S.ver = d.ver || ''; S.loaded = true; } } catch(e){}
+    try { const d = JSON.parse(store.get('prt_data') || 'null'); if (d){ S.events = d.events; S.results = d.results; S.students = d.students || []; S.houses = d.houses || []; S.champs = d.champs || {}; S.certs = d.certs || {}; S.batches = d.batches || []; S.ver = d.ver || ''; S.studentsVer = d.studentsVer || ''; S.loaded = true; } } catch(e){}
     showApp(); loadFirst(); return;
   }   // signed in: go straight to the app
   showSplash('Welcome back — preparing your dashboard…');           // signed in but profile not cached yet
