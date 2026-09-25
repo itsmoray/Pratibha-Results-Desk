@@ -722,7 +722,7 @@ function paint(){
     L.innerHTML = list.length ? list.map(e => `<div class="item"><div class="row"><h3>${esc(e.name)}</h3>
       <span class="pill ${isDone(e.id) ? 'done' : 'wait'}">${isDone(e.id) ? 'Declared' : 'Pending'}</span></div>
       <div class="meta">${esc(e.id)}${e.category ? ', ' + esc(e.category) : ''}${e.venue ? ', ' + esc(e.venue) : ''}</div><div class="tagRow"><span class="tag">${e.judgesNeeded ? e.judgeCount + ' of ' + plural(e.judgesNeeded, 'judge') : plural(e.judgeCount, 'judge')}</span><span class="tag">${e.criteriaCount ? plural(e.criteriaCount, 'criterion') : 'One mark out of ' + e.maxMark}</span></div>
-      <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="${e.judged ? `openJudging('${e.id}')` : `openEditor('${e.id}')`}">${isDone(e.id) ? 'View result' : 'Enter result'}</button><button class="btn ghost small" onclick="openEventEdit('${e.id}')">Edit</button><button class="btn ghost small" onclick="openCriteria('${e.id}')">Criteria</button>
+      <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openEditor('${e.id}')">${isDone(e.id) ? 'View / edit result' : 'Enter result'}</button><button class="btn ghost small" onclick="openEventEdit('${e.id}')">Edit</button><button class="btn ghost small" onclick="openCriteria('${e.id}')">Criteria</button>
       <button class="btn ghost small" onclick="delEvent('${e.id}')">Delete</button></div></div>`).join('')
       : '<div class="empty">No events yet. Add your event list above.</div>';
   }
