@@ -469,7 +469,13 @@ async function api(action, payload = {}, silent){
   }
   try {
     let res, raw, j, lastErr, badReply = false;
-    for (let attempt = 0; attempt < 3; attempt++){
+    // Apps Script web apps respond with a redirect to a script.googleusercontent.com/macros/echo
+    // URL, and that redirect target intermittently 404s on Google's own serving layer — even
+    // though the script itself already finished successfully server-side. It's not a dropped
+    // connection and not something we can fix here, just something to quietly outlast, so a bad
+    // reply gets more attempts and a longer wait than a plain network drop.
+    const MAX_ATTEMPTS = 5;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++){
       badReply = false;
       try {
         res = await fetch(API_URL, { method:'POST', redirect:'follow', body: JSON.stringify({ action, token:S.token, ...payload }) });
@@ -480,7 +486,7 @@ async function api(action, payload = {}, silent){
         // resource lock (e.g. two judges saving the same event at once) and asked us to
         // retry. That's not a dropped connection, but it's just as safe to retry quietly:
         // treat it the same as a network hiccup instead of surfacing it as an error.
-        if (!j.ok && j.code === 'BUSY' && attempt < 2){
+        if (!j.ok && j.code === 'BUSY' && attempt < MAX_ATTEMPTS - 1){
           if (!silent) $('#loadPillText').textContent = 'Busy, retrying…';
           await new Promise(r => setTimeout(r, 500 * (attempt + 1) + Math.floor(Math.random() * 300)));
           continue;
@@ -495,12 +501,15 @@ async function api(action, payload = {}, silent){
           badReply = true;
           console.log('RAW RESPONSE for action "' + action + '" (status ' + (res ? res.status : '?') + '):', raw);
         }
-        if (attempt < 2) await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+        if (attempt < MAX_ATTEMPTS - 1){
+          if (!silent) $('#loadPillText').textContent = badReply ? 'Reconnecting…' : 'Working…';
+          await new Promise(r => setTimeout(r, (badReply ? 900 : 600) * (attempt + 1) + Math.floor(Math.random() * 300)));
+        }
       }
     }
     if (lastErr){
       throw new Error(badReply
-        ? 'Server sent an unexpected reply. Check the web app deployment.'
+        ? 'Google\u2019s servers had a hiccup delivering the response. Please try again in a moment — nothing was lost.'
         : 'No connection. Check your internet — your entries are still on this screen, nothing was lost.');
     }
     if (!j.ok){
