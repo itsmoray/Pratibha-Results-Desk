@@ -142,6 +142,8 @@ dialog h2{font-size:22px}
 .creds b{display:block;margin-top:2px;font-weight:600;font-size:17px;overflow-wrap:anywhere;user-select:all}
 #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 16px;border-radius:10px;z-index:99;max-width:90%;font-weight:500}
 #toast.bad{background:var(--danger)}
+#netbanner{position:fixed;left:50%;top:10px;transform:translateX(-50%);background:var(--gold-soft);color:var(--ink);border:1px solid var(--gold);padding:7px 14px;border-radius:20px;z-index:101;font-weight:600;font-size:13px;display:flex;align-items:center;gap:7px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+#netbanner i{width:7px;height:7px;border-radius:50%;background:var(--danger);flex:none}
 @media(prefers-reduced-motion:no-preference){.strip i{transition:background .4s}}
 
 /* loading + polish */
@@ -356,6 +358,7 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
 </section>
 <dialog id="dlg"></dialog>
 <div id="toast" role="status" aria-live="polite" hidden></div>
+<div id="netbanner" role="status" aria-live="polite" hidden><i></i>Offline — your entries are saved on this device and will sync automatically</div>
 
 <script>
 /* ====== CONFIG ====== */
@@ -377,6 +380,18 @@ function toast(msg, bad){
   const t = $('#toast'); t.textContent = msg; t.className = bad ? 'bad' : ''; t.hidden = false;
   clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3200);
 }
+
+/* ====== CONNECTIVITY (keeps judges' entries safe across drop-outs) ====== */
+let online = navigator.onLine;
+function paintNet(){ const b = $('#netbanner'); if (b) b.hidden = online; }
+window.addEventListener('offline', () => { online = false; paintNet(); });
+window.addEventListener('online', () => {
+  online = true; paintNet();
+  // Flush any marks entered while offline first, then quietly resync everything else.
+  Promise.resolve(typeof window._flushMarks === 'function' ? window._flushMarks() : null)
+    .finally(() => { if (S.token && S.loaded) refresh().catch(() => {}); });
+});
+paintNet();
 
 let pending = 0;
 async function api(action, payload = {}, silent){
@@ -958,6 +973,8 @@ function renderScoring(j, draft){
   if (window._markAutosave) clearInterval(window._markAutosave);
   if (window._markUnload) window.removeEventListener('beforeunload', window._markUnload);
   if (restored) toast('Restored marks you had entered earlier but not saved');
+  const netMsg = () => online ? 'Could not save yet — will keep trying (nothing lost, still saved locally)'
+                               : 'Offline — saved on this device, will sync automatically';
   const rowsEl = () => [...dlg.querySelectorAll('#mtbl .mrow')];
   const inputs = () => [...dlg.querySelectorAll('#mtbl input[data-c]')];
   const calc = () => {
@@ -999,15 +1016,28 @@ function renderScoring(j, draft){
   // Auto-save every 20s while marks are unsaved, quietly, so a judge who forgets to click Save is still covered.
   window._markAutosave = setInterval(async () => {
     if (!hasUnsaved || !dlg.open) return;
-    try { await saveAll(); } catch(e){ const s = $('#saveState'); if (s) s.textContent = 'Could not save yet — will keep trying (nothing lost, still saved locally)'; }
+    try { await saveAll(); } catch(e){ const s = $('#saveState'); if (s) s.textContent = netMsg(); }
   }, 20000);
   // Warn before an accidental close/refresh while there is anything not yet confirmed saved on the server.
   window._markUnload = e => { if (hasUnsaved){ e.preventDefault(); e.returnValue = ''; } };
   window.addEventListener('beforeunload', window._markUnload);
+  // Lets the global 'online' handler push a save the moment the connection returns, instead of waiting for the next tick.
+  window._flushMarks = async () => {
+    if (!hasUnsaved || !dlg.open) return;
+    try { await saveAll(); toast('Back online — marks synced'); } catch(e){}
+  };
   dlg.addEventListener('close', () => {
     if (window._markAutosave) clearInterval(window._markAutosave);
     if (window._markUnload) window.removeEventListener('beforeunload', window._markUnload);
+    window._flushMarks = null;
   }, { once: true });
+  // A draft restored from this device may already be stale-safe to send — try right away rather than
+  // waiting on a click or the next autosave tick, so a judge who reopens after reconnecting sees it sync unprompted.
+  if (restored){
+    hasUnsaved = true;
+    saveAll().then(() => { const s = $('#saveState'); if (s) s.textContent = 'Saved'; })
+      .catch(() => { const s = $('#saveState'); if (s) s.textContent = netMsg(); });
+  }
   const addBox = $('#addChest');
   if (addBox){
     wireLookup(addBox, $('#addLine'));
