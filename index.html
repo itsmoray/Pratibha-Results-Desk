@@ -641,11 +641,11 @@ function tabsFor(){
   const t = [];
   if (role() !== 'judge') t.push(['dash', 'Dashboard']);
   if (role() === 'judge') t.push(['score', 'Judge marks']);
-  if (role() === 'admin' || role() === 'faculty' || role() === 'committee') t.push(['enter', role() === 'admin' ? 'All events' : 'My events']);
+  if (role() === 'admin') t.push(['enter', 'All events']);
   t.push(['board', 'Results']);
-  if (role() === 'admin' || role() === 'committee' || role() === 'viewer') t.push(['certs', 'Certificates']);
+  if (role() === 'admin' || role() === 'viewer') t.push(['certs', 'Certificates']);
   t.push(['house', 'House points']);
-  if (role() === 'admin' || role() === 'committee') t.push(['roster', 'Roster']);
+  if (role() === 'admin') t.push(['roster', 'Roster']);
   if (role() === 'admin'){ t.push(['users', 'Accounts']); t.push(['manage', 'Manage events']); t.push(['log', 'Activity']); }
   return t;
 }
@@ -696,7 +696,7 @@ async function setTab(k){
       <div id="list" class="list"></div>`;
     wireOneStudent();
   } else if (k === 'board'){
-    const canX = role() === 'admin' || role() === 'committee' || role() === 'viewer';
+    const canX = role() === 'admin' || role() === 'viewer';
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search declared results" oninput="S.q=this.value;paint()">
       ${canX ? '<button class="btn gold" onclick="exportXlsx()">Download Excel</button>' : ''}</div><div id="list" class="list"></div><p class="waiting" id="waiting"></p>`;
   } else if (k === 'certs'){
@@ -822,7 +822,7 @@ function paint(){
   else if (S.tab === 'users'){
     L.innerHTML = S.users.length ? S.users.map(u => `<div class="item"><div class="row"><h3>${esc(u.name)}</h3>
       <span class="pill ${u.active ? 'done' : 'off'}">${u.active ? esc(cap(u.role)) : 'Disabled'}</span></div>
-      <div class="meta">${esc(u.email)}${(u.role === 'faculty' || u.role === 'judge') ? ', ' + (u.events === 'ALL' ? 'all events' : plural(u.events ? u.events.split(',').length : 0, 'event')) : ''}</div>
+      <div class="meta">${esc(u.email)}${(u.role === 'judge') ? ', ' + (u.events === 'ALL' ? 'all events' : plural(u.events ? u.events.split(',').length : 0, 'event')) : ''}</div>
       <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openUser('${esc(u.email)}')">Edit</button>
       ${u.email === S.me.email ? '' : `<button class="btn ghost small" onclick="delUser('${esc(u.email)}')">Delete</button>`}</div></div>`).join('')
       : '<div class="empty">No accounts yet.</div>';
@@ -1034,7 +1034,7 @@ const HOUSES_UI = ['Shadjam','Rishabham','Gandharam','Madhyamam','Panchamam','Dh
 const STAGES_UI = ['On-stage','Off-stage','Both'];
 const stageCls = s => s === 'On-stage' ? 'on' : s === 'Off-stage' ? 'off' : s === 'Both' ? 'grp' : '';
 
-/* ====== JUDGING (admin/committee review + declare) ====== */
+/* ====== JUDGING (admin review + declare) ====== */
 const whoCell = r => r.missing
   ? `<span class="errTxt">Chest #${esc(r.chest)}</span><small>not on the roster — safe to remove</small>`
   : `${esc(r.name)}<small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small>`;
@@ -1280,7 +1280,7 @@ function openUser(email){
   <form id="uf">
   ${u ? '' : '<label>Email <input name="email" type="email" inputmode="email" placeholder="name@example.com" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" required></label>'}
   <label>Full name <input name="name" value="${esc(u ? u.name : '')}" required></label>
-  <label>Role <select name="role" id="ur"><option value="faculty">Faculty (enters results)</option><option value="judge">Judge (enters marks only)</option><option value="viewer">Certificate committee (view only)</option><option value="committee">Committee (declares results, manages roster)</option><option value="admin">Admin (full access)</option></select></label>
+  <label>Role <select name="role" id="ur"><option value="judge">Judge (enters marks only)</option><option value="viewer">Certificate committee (view only)</option><option value="admin">Admin (full access)</option></select></label>
   <label>${u ? 'New password (leave empty to keep)' : 'Password'}
     <span class="inline"><input name="password" id="upw" autocomplete="new-password" ${u ? '' : 'required'} minlength="6"><button type="button" class="btn ghost small" onclick="$('#upw').value=genPw()">Generate</button></span></label>
   ${u ? `<label style="display:flex;gap:10px;align-items:center;font-weight:500"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> Account active</label>` : ''}
@@ -1290,8 +1290,8 @@ function openUser(email){
       ${S.events.map(e => `<label><input type="checkbox" class="ev" value="${e.id}" ${sel !== 'ALL' && sel.includes(e.id) ? 'checked' : ''} ${sel === 'ALL' ? 'disabled' : ''}> ${esc(e.name)}</label>`).join('')}
     </div></div>
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">${u ? 'Save changes' : 'Create account'}</button></div></form>`);
-  const f = $('#uf'); f.role.value = u ? u.role : 'faculty';
-  const sync = () => { $('#evbox').hidden = f.role.value !== 'faculty' && f.role.value !== 'judge'; };
+  const f = $('#uf'); f.role.value = u ? u.role : 'judge';
+  const sync = () => { $('#evbox').hidden = f.role.value !== 'judge'; };
   f.role.addEventListener('change', sync); sync();
   $('#all').addEventListener('change', e => document.querySelectorAll('.ev').forEach(c => { c.disabled = e.target.checked; }));
   f.addEventListener('submit', async ev => {
