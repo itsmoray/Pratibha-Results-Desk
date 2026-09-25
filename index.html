@@ -897,13 +897,30 @@ async function addStudentsBulk(){
   });
   if (!items.length) return toast('Type at least one student first', true);
   const b = $('#addStuBtn'); b.disabled = true;
+  // Long lists are sent in small batches: one huge request can outlast the browser's connection to
+  // the Apps Script server (the script keeps running and saves the data even if the reply back never
+  // arrives in one piece), which looks like a failure even though nothing was lost. Chunking keeps
+  // each round trip short and lets you see progress as it goes.
+  const CHUNK = 80;
+  let added = 0, updated = 0, unknownHouse = 0, houseMismatch = 0, failedAt = -1;
   try {
-    const j = await api('addStudents', { items });
+    for (let i = 0; i < items.length; i += CHUNK) {
+      const chunk = items.slice(i, i + CHUNK);
+      if (items.length > CHUNK) toast(`Adding ${Math.min(i + CHUNK, items.length)} of ${items.length}…`, false);
+      const j = await api('addStudents', { items: chunk });
+      added += j.added; updated += j.updated; unknownHouse += j.unknownHouse; houseMismatch += j.houseMismatch;
+      mergeStudents_(j.students); paint();
+      failedAt = i + CHUNK;
+    }
     $('#bulkStu').value = '';
-    toast(plural(j.added,'student') + ' added, ' + j.updated + ' updated' + (j.unknownHouse ? '. ' + plural(j.unknownHouse,'student') + ' with no valid house' : '') + (j.houseMismatch ? '. ' + plural(j.houseMismatch,'student') + ' with a house different from their batch' : ''), !!(j.unknownHouse || j.houseMismatch));
-    mergeStudents_(j.students); paint();
+    toast(plural(added,'student') + ' added, ' + updated + ' updated' + (unknownHouse ? '. ' + plural(unknownHouse,'student') + ' with no valid house' : '') + (houseMismatch ? '. ' + plural(houseMismatch,'student') + ' with a house different from their batch' : ''), !!(unknownHouse || houseMismatch));
   }
-  catch(e){ toast(e.message, true); }
+  catch(e){
+    // Whatever was already sent in earlier chunks is safely saved — only the remaining, un-sent lines
+    // are still in the box, so re-clicking "Add students" picks up exactly where it left off.
+    if (failedAt > -1) $('#bulkStu').value = items.slice(failedAt).map(i => [i.chest,i.name,i.cls,i.house,i.gender,i.stage].join(' | ')).join('\n');
+    toast((failedAt > -1 ? plural(added,'student') + ' saved so far. ' : '') + e.message, true);
+  }
   b.disabled = false;
 }
 function openStudentEdit(chest){
