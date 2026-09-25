@@ -468,18 +468,31 @@ async function api(action, payload = {}, silent){
     $('#loadPill').classList.add('on');
   }
   try {
-    let res, lastErr;
+    let res, raw, j, lastErr, badReply = false;
     for (let attempt = 0; attempt < 3; attempt++){
-      try { res = await fetch(API_URL, { method:'POST', redirect:'follow', body: JSON.stringify({ action, token:S.token, ...payload }) }); lastErr = null; break; }
-      catch(e){ lastErr = e; if (attempt < 2) await new Promise(r => setTimeout(r, 600 * (attempt + 1))); }
+      badReply = false;
+      try {
+        res = await fetch(API_URL, { method:'POST', redirect:'follow', body: JSON.stringify({ action, token:S.token, ...payload }) });
+        raw = await res.text();
+        j = JSON.parse(raw);
+        lastErr = null;
+        break;
+      } catch(e){
+        lastErr = e;
+        if (e instanceof SyntaxError){
+          // Not a network problem — the request reached a server, but got back something
+          // that isn't JSON (e.g. a transient Google Drive/Sheets error page under heavy
+          // concurrent load). Log it for diagnosis and retry the same as a dropped connection.
+          badReply = true;
+          console.log('RAW RESPONSE for action "' + action + '" (status ' + (res ? res.status : '?') + '):', raw);
+        }
+        if (attempt < 2) await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+      }
     }
-    if (lastErr) throw new Error('No connection. Check your internet — your entries are still on this screen, nothing was lost.');
-    let j;
-    const raw = await res.text();
-    try { j = JSON.parse(raw); }
-    catch(e){
-      console.log('RAW RESPONSE for action "' + action + '" (status ' + res.status + '):', raw);
-      throw new Error('Server sent an unexpected reply. Check the web app deployment.');
+    if (lastErr){
+      throw new Error(badReply
+        ? 'Server sent an unexpected reply. Check the web app deployment.'
+        : 'No connection. Check your internet — your entries are still on this screen, nothing was lost.');
     }
     if (!j.ok){
       if (j.code === 'AUTH') endSession(j.error);
