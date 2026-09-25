@@ -441,6 +441,14 @@ function fmtLog(iso){
 const isDone = id => !!(S.results[id] && S.results[id].p1);
 const role = () => S.me ? S.me.role : '';
 const studentBy = chest => S.students.find(s => s.chest === String(chest || '').trim());
+// Update S.students in place from a server response, so the roster repaints instantly without
+// a second, heavier round trip to re-fetch everything.
+function mergeStudents_(students){
+  (students || []).forEach(s => {
+    const idx = S.students.findIndex(x => x.chest === s.chest);
+    if (idx > -1) S.students[idx] = s; else S.students.push(s);
+  });
+}
 const studentsDL = () => '<datalist id="studentsDL">' + S.students.map(s => `<option value="${esc(s.chest)}">${esc(s.name)}</option>`).join('') + '</datalist>';
 function lookupLine(chest){
   const c = String(chest || '').trim();
@@ -857,7 +865,10 @@ function wireOneStudent(){
     try {
       const j = await api('addStudents', { items:[{ chest:f.chest.value, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value }] });
       toast(j.added ? 'Student added' : 'Chest number already existed, details updated');
-      f.chest.value = ''; f.name.value = ''; f.chest.focus(); await refresh();
+      // Drop the saved student straight into the list instead of re-downloading the whole roster (and
+      // every other sheet) — that round trip is what was making one-by-one adds feel slow.
+      mergeStudents_(j.students);
+      f.chest.value = ''; f.name.value = ''; f.chest.focus(); paint();
     } catch(e){ toast(e.message, true); }
     b.disabled = false;
   });
@@ -868,7 +879,12 @@ async function addStudentsBulk(){
   });
   if (!items.length) return toast('Type at least one student first', true);
   const b = $('#addStuBtn'); b.disabled = true;
-  try { const j = await api('addStudents', { items }); $('#bulkStu').value = ''; toast(plural(j.added,'student') + ' added, ' + j.updated + ' updated' + (j.unknownHouse ? '. ' + plural(j.unknownHouse,'student') + ' with no valid house' : '') + (j.houseMismatch ? '. ' + plural(j.houseMismatch,'student') + ' with a house different from their batch' : ''), !!(j.unknownHouse || j.houseMismatch)); await refresh(); }
+  try {
+    const j = await api('addStudents', { items });
+    $('#bulkStu').value = '';
+    toast(plural(j.added,'student') + ' added, ' + j.updated + ' updated' + (j.unknownHouse ? '. ' + plural(j.unknownHouse,'student') + ' with no valid house' : '') + (j.houseMismatch ? '. ' + plural(j.houseMismatch,'student') + ' with a house different from their batch' : ''), !!(j.unknownHouse || j.houseMismatch));
+    mergeStudents_(j.students); paint();
+  }
   catch(e){ toast(e.message, true); }
   b.disabled = false;
 }
