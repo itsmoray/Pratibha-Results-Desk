@@ -159,7 +159,18 @@ dialog h2{font-size:22px}
 .strip.loading i{background:linear-gradient(90deg,var(--ink2) 25%,#A5505F 50%,var(--ink2) 75%);background-size:200% 100%;animation:shimmer 1.2s linear infinite}
 #topbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:100;opacity:0;transition:opacity .2s;pointer-events:none;background:linear-gradient(90deg,transparent,var(--gold),transparent) no-repeat;background-size:50% 100%;animation:slide 1s linear infinite}
 #topbar.on{opacity:1}
-.splash{position:fixed;inset:0;background:var(--maroon);display:grid;place-items:center;z-index:50}
+.splash{position:fixed;inset:0;background:var(--maroon);display:grid;place-items:center;z-index:50;opacity:1;transition:opacity .38s ease}
+.splash.out{opacity:0;pointer-events:none}
+.splash-card{display:flex;flex-direction:column;align-items:center;gap:6px;color:#fff;animation:splashIn .55s cubic-bezier(.22,1,.36,1)}
+.splash-mark{width:62px;height:62px;border-radius:19px;background:linear-gradient(135deg,var(--gold),#F3CD7E);display:flex;align-items:center;justify-content:center;box-shadow:0 16px 36px rgba(0,0,0,.3);margin-bottom:6px;animation:splashPop .6s cubic-bezier(.34,1.56,.64,1)}
+.splash-mark span{font-family:var(--head);font-weight:700;font-size:28px;color:var(--maroon2)}
+.splash-brand{font-family:var(--head);font-weight:700;font-size:25px;letter-spacing:.01em}
+.splash-sub{font:700 11px var(--body);letter-spacing:.16em;text-transform:uppercase;opacity:.72;margin-top:-3px;margin-bottom:14px}
+.splash-card .spin{margin-top:2px}
+.splash-msg{font-size:13px;opacity:.85;margin-top:10px;min-height:16px}
+@keyframes splashIn{from{opacity:0;transform:translateY(10px)}}
+@keyframes splashPop{0%{opacity:0;transform:scale(.4) rotate(-8deg)}60%{opacity:1;transform:scale(1.08) rotate(2deg)}100%{transform:scale(1) rotate(0)}}
+@media(prefers-reduced-motion:reduce){.splash-card,.splash-mark{animation-duration:.01s}.splash{transition-duration:.01s}}
 .spin{width:38px;height:38px;border:4px solid var(--ink2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
 .x{position:absolute;top:12px;right:12px;width:36px;height:36px;border:0;border-radius:50%;background:var(--paper);font-size:22px;line-height:1;color:var(--ink)}
 .x:hover{background:var(--line)}
@@ -342,7 +353,7 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
 <div id="topbar"></div>
 <div id="loadPill" role="status" aria-live="polite"><span class="ld-spin"></span><span id="loadPillText">Working…</span></div>
 <div id="successPop" aria-live="polite"><div class="tick-card"><div class="tick-circle"><svg viewBox="0 0 24 24"><path d="M4 12.5 9.5 18 20 6"/></svg></div><div class="tick-msg" id="successMsg">Done</div></div></div>
-<div class="splash" id="splash" hidden><div class="spin" role="status" aria-label="Loading"></div></div>
+<div class="splash" id="splash" hidden><div class="splash-card"><div class="splash-mark"><span>P</span></div><div class="splash-brand">Pratibha</div><div class="splash-sub">Results Desk</div><div class="spin" role="status" aria-label="Loading"></div><div class="splash-msg" id="splashMsg">Loading…</div></div></div>
 
 <!-- LOGIN -->
 <section class="login" id="login" hidden>
@@ -415,6 +426,18 @@ function successTick(msg){
 }
 // success + toast together, for the actions that matter most
 function celebrate(msg){ toast(msg); successTick(msg); }
+
+/* welcome splash — shown right after sign-in (and on a fresh app boot) while the dashboard's
+   first data load happens behind it, then fades out into the loaded screen */
+function showSplash(msg){
+  const el = $('#splash'); $('#splashMsg').textContent = msg || 'Loading…';
+  el.classList.remove('out'); el.hidden = false;
+}
+function hideSplash(){
+  const el = $('#splash'); if (el.hidden) return;
+  el.classList.add('out');
+  setTimeout(() => { el.hidden = true; el.classList.remove('out'); }, 380);
+}
 
 /* ====== CONNECTIVITY (keeps judges' entries safe across drop-outs) ====== */
 let online = navigator.onLine;
@@ -539,8 +562,16 @@ $('#loginForm').addEventListener('submit', async e => {
   try {
     const j = await api('login', { email:$('#lu').value.trim(), password:$('#lp').value });
     S.token = j.token; S.me = j.me; store.set('prt_token', j.token); store.set('prt_me', JSON.stringify(j.me));
-    $('#lp').value = ''; showApp(); loadFirst();
-  } catch(err){ er.textContent = err.message; er.hidden = false; }
+    $('#lp').value = '';
+    $('#login').hidden = true;
+    showSplash('Welcome, ' + (j.me.name || 'back').split(' ')[0] + ' — preparing your dashboard…');
+    const started = Date.now();
+    showApp();
+    await loadFirst();
+    // keep the splash up a moment even on a fast connection, so it reads as a deliberate
+    // transition rather than a flicker; if the load was slow, this adds nothing extra.
+    setTimeout(hideSplash, Math.max(0, 550 - (Date.now() - started)));
+  } catch(err){ er.textContent = err.message; er.hidden = false; b.disabled = false; b.textContent = 'Sign in'; return; }
   b.disabled = false; b.textContent = 'Sign in';
 });
 
@@ -1504,11 +1535,11 @@ function startLive(){
     try { const d = JSON.parse(store.get('prt_data') || 'null'); if (d){ S.events = d.events; S.results = d.results; S.students = d.students || []; S.houses = d.houses || []; S.champs = d.champs || {}; S.certs = d.certs || {}; S.batches = d.batches || []; S.ver = d.ver || ''; S.loaded = true; } } catch(e){}
     showApp(); loadFirst(); return;
   }   // signed in: go straight to the app
-  $('#splash').hidden = false;                            // signed in but profile not cached yet
+  showSplash('Welcome back — preparing your dashboard…');           // signed in but profile not cached yet
   api('data').then(j => {
     S.me = j.me; store.set('prt_me', JSON.stringify(j.me));
-    $('#splash').hidden = true; showApp(); loadFirst();
-  }).catch(() => { $('#splash').hidden = true; if (S.token) $('#login').hidden = false; });
+    hideSplash(); showApp(); loadFirst();
+  }).catch(() => { hideSplash(); if (S.token) $('#login').hidden = false; });
 })();
 </script>
 </body>
