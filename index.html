@@ -171,6 +171,25 @@ dialog h2{padding-right:40px}
 }
 @media(prefers-reduced-motion:reduce){.sk-l,.strip.loading i,#topbar,.spin,.btn:disabled::after{animation-duration:3s}}
 
+/* global loading pill (shows whenever a request is in flight) */
+#loadPill{position:fixed;left:50%;top:14px;transform:translateX(-50%) translateY(-12px);z-index:120;display:flex;align-items:center;gap:9px;background:var(--ink);color:#fff;padding:9px 16px 9px 13px;border-radius:99px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;box-shadow:0 10px 26px rgba(29,20,24,.22)}
+#loadPill.on{opacity:1;transform:translateX(-50%) translateY(0)}
+#loadPill .ld-spin{width:15px;height:15px;flex:none;border:2px solid rgba(255,255,255,.32);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite}
+@media(prefers-reduced-motion:reduce){#loadPill .ld-spin{animation-duration:2.4s}}
+
+/* success tick overlay (for major submits) */
+#successPop{position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .22s ease}
+#successPop.on{opacity:1}
+.tick-card{background:var(--card);border-radius:20px;padding:26px 34px;box-shadow:0 22px 60px rgba(29,20,24,.32);display:flex;flex-direction:column;align-items:center;gap:10px;transform:scale(.82);transition:transform .28s cubic-bezier(.34,1.56,.64,1)}
+#successPop.on .tick-card{transform:scale(1)}
+.tick-circle{width:60px;height:60px;border-radius:50%;background:var(--teal-soft);display:flex;align-items:center;justify-content:center;flex:none}
+.tick-circle svg{width:32px;height:32px;overflow:visible}
+.tick-circle path{stroke:var(--teal);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:40;stroke-dashoffset:40}
+#successPop.on .tick-circle path{animation:tickdraw .4s ease-out .12s forwards}
+.tick-msg{font-weight:700;color:var(--ink);font-size:15px;text-align:center;max-width:240px}
+@keyframes tickdraw{to{stroke-dashoffset:0}}
+@media(prefers-reduced-motion:reduce){.tick-circle path{animation-duration:1.2s!important}}
+
 /* judging + roster + house board */
 .hint{font-size:13px;color:var(--muted);margin:2px 0 10px}
 .lookup{border:1.5px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:6px;font-size:14px;background:var(--paper)}
@@ -321,6 +340,8 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
 </head>
 <body>
 <div id="topbar"></div>
+<div id="loadPill" role="status" aria-live="polite"><span class="ld-spin"></span><span id="loadPillText">Working…</span></div>
+<div id="successPop" aria-live="polite"><div class="tick-card"><div class="tick-circle"><svg viewBox="0 0 24 24"><path d="M4 12.5 9.5 18 20 6"/></svg></div><div class="tick-msg" id="successMsg">Done</div></div></div>
 <div class="splash" id="splash" hidden><div class="spin" role="status" aria-label="Loading"></div></div>
 
 <!-- LOGIN -->
@@ -381,6 +402,20 @@ function toast(msg, bad){
   clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3200);
 }
 
+/* success tick popup — for major submits (submitting marks, declaring a result, saving a
+   student/event/account, etc.) so the user gets a clear "that worked" moment, not just a toast */
+let successT;
+function successTick(msg){
+  const el = $('#successPop'); if (!el) return;
+  $('#successMsg').textContent = msg || 'Done';
+  const path = el.querySelector('path');
+  el.classList.remove('on'); path.style.animation = 'none'; void el.offsetWidth; path.style.animation = '';
+  el.classList.add('on');
+  clearTimeout(successT); successT = setTimeout(() => el.classList.remove('on'), 1500);
+}
+// success + toast together, for the actions that matter most
+function celebrate(msg){ toast(msg); successTick(msg); }
+
 /* ====== CONNECTIVITY (keeps judges' entries safe across drop-outs) ====== */
 let online = navigator.onLine;
 function paintNet(){ const b = $('#netbanner'); if (b) b.hidden = online; }
@@ -394,9 +429,20 @@ window.addEventListener('online', () => {
 paintNet();
 
 let pending = 0;
+const LOAD_LABELS = {
+  addStudent:'Saving student…', bulkAddStudents:'Adding students…', updateStudent:'Saving changes…', deleteStudent:'Removing student…',
+  saveMarks:'Saving marks…', lockSubmission:'Submitting marks…', unlockSubmission:'Unlocking…', declareFromMarks:'Declaring result…',
+  saveResult:'Saving result…', addEvent:'Adding event…', addEvents:'Adding events…', updateEvent:'Saving event…', deleteEvent:'Removing event…',
+  setCriteria:'Saving criteria…', importOfficialEvents:'Importing events…', changePassword:'Updating password…',
+  addUser:'Saving account…', updateUser:'Saving account…', deleteUser:'Removing account…'
+};
 async function api(action, payload = {}, silent){
   if (API_URL.startsWith('PASTE')) throw new Error('Set API_URL in index.html first');
-  if (!silent){ pending++; $('#topbar').classList.add('on'); }
+  if (!silent){
+    pending++; $('#topbar').classList.add('on');
+    $('#loadPillText').textContent = LOAD_LABELS[action] || 'Working…';
+    $('#loadPill').classList.add('on');
+  }
   try {
     let res, lastErr;
     for (let attempt = 0; attempt < 3; attempt++){
@@ -417,7 +463,7 @@ async function api(action, payload = {}, silent){
     }
     return j;
   } finally {
-    if (!silent){ pending--; if (!pending) $('#topbar').classList.remove('on'); }
+    if (!silent){ pending--; if (!pending){ $('#topbar').classList.remove('on'); $('#loadPill').classList.remove('on'); } }
   }
 }
 
@@ -882,7 +928,7 @@ function wireOneStudent(){
     ev.preventDefault(); const b = $('#osb'); b.disabled = true;
     try {
       const j = await api('addStudents', { items:[{ chest:f.chest.value, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value, stage:f.stage.value }] });
-      toast(j.added ? 'Student added' : 'Chest number already existed, details updated');
+      celebrate(j.added ? 'Student added' : 'Chest number already existed, details updated');
       // Drop the saved student straight into the list instead of re-downloading the whole roster (and
       // every other sheet) — that round trip is what was making one-by-one adds feel slow.
       mergeStudents_(j.students);
@@ -913,7 +959,9 @@ async function addStudentsBulk(){
       failedAt = i + CHUNK;
     }
     $('#bulkStu').value = '';
-    toast(plural(added,'student') + ' added, ' + updated + ' updated' + (unknownHouse ? '. ' + plural(unknownHouse,'student') + ' with no valid house' : '') + (houseMismatch ? '. ' + plural(houseMismatch,'student') + ' with a house different from their batch' : ''), !!(unknownHouse || houseMismatch));
+    { const warn = !!(unknownHouse || houseMismatch);
+      const msg = plural(added,'student') + ' added, ' + updated + ' updated' + (unknownHouse ? '. ' + plural(unknownHouse,'student') + ' with no valid house' : '') + (houseMismatch ? '. ' + plural(houseMismatch,'student') + ' with a house different from their batch' : '');
+      if (warn) toast(msg, true); else celebrate(msg); }
   }
   catch(e){
     // Whatever was already sent in earlier chunks is safely saved — only the remaining, un-sent lines
@@ -938,7 +986,7 @@ function openStudentEdit(chest){
   wireClassCascade($('#sf'), 'sf', hh => { if (hh) $('#sf').house.value = hh; }).setFromCls(s.cls);
   $('#sf').addEventListener('submit', async ev => {
     ev.preventDefault(); const f = ev.target, b = $('#sb'), er = $('#fe'); er.hidden = true; b.disabled = true;
-    try { await api('updateStudent', { chest, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value, stage:f.stage.value }); closeDlg(); toast('Student updated'); await refresh(); }
+    try { await api('updateStudent', { chest, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value, stage:f.stage.value }); closeDlg(); celebrate('Student updated'); await refresh(); }
     catch(err){ er.textContent = err.message; er.hidden = false; b.disabled = false; }
   });
 }
@@ -984,7 +1032,7 @@ function renderJudging(j){
   <button type="button" class="btn gold" id="declBtn" ${j.entries.filter(r=>r.avg!==null).length ? '' : 'disabled'}>Declare top 3</button></div>`);
   $('#declBtn').onclick = async () => {
     const b = $('#declBtn'); b.disabled = true; b.textContent = 'Declaring…';
-    try { await api('declareFromMarks', { eventId: ev.id }); closeDlg(); toast('Result declared'); await refresh(); }
+    try { await api('declareFromMarks', { eventId: ev.id }); closeDlg(); celebrate('Result declared'); await refresh(); }
     catch(e){ toast(e.message, true); b.disabled = false; b.textContent = 'Declare top 3'; }
   };
 }
@@ -1113,7 +1161,7 @@ function renderScoring(j, draft){
     });
   }
   const sb = $('#saveBtn');
-  if (sb) sb.onclick = async () => { sb.disabled = true; try { if (!collect().length) toast('Enter a mark first', true); else { await saveAll(); toast('Marks saved'); } } catch(e){ toast(e.message, true); } sb.disabled = false; };
+  if (sb) sb.onclick = async () => { sb.disabled = true; try { if (!collect().length) toast('Enter a mark first', true); else { await saveAll(); celebrate('Marks saved'); } } catch(e){ toast(e.message, true); } sb.disabled = false; };
   const lb = $('#lockBtn');
   if (lb) lb.onclick = async () => {
     lb.disabled = true;
@@ -1121,7 +1169,7 @@ function renderScoring(j, draft){
     const missing = j.entries.length - rowsEl().filter(tr => [...tr.querySelectorAll('input[data-c]')].every(i => i.value !== '')).length;
     const ok = await confirmBox('Submit final marks?', (missing ? missing + ' student(s) are not fully marked and will not count for you. ' : '') + 'You will not be able to change your marks afterwards unless an admin unlocks them.', 'Submit');
     if (!ok){ openScoring(ev.id); return; }
-    try { await api('lockSubmission', { eventId: ev.id }); toast('Marks submitted'); closeDlg(); } catch(e){ toast(e.message, true); }
+    try { await api('lockSubmission', { eventId: ev.id }); celebrate('Marks submitted'); closeDlg(); } catch(e){ toast(e.message, true); }
   };
 }
 async function removeEntry(eventId, chest){
@@ -1163,7 +1211,7 @@ function openEditor(id){
     er.hidden = true; b.disabled = true; b.textContent = 'Saving…';
     try {
       await api('saveResult', { eventId:id, result:fd });
-      closeDlg(); toast('Result saved'); paintProgress(); paint();
+      closeDlg(); celebrate('Result saved'); paintProgress(); paint();
       refresh().catch(() => {});
     }
     catch(err){ er.textContent = err.message; er.hidden = false; b.disabled = false; b.textContent = 'Save result'; }
@@ -1181,7 +1229,7 @@ function openPassword(){
     ev.preventDefault(); const f = ev.target, b = $('#pb'), er = $('#fe'); er.hidden = true;
     if (f.n.value !== f.n2.value){ er.textContent = 'The two new passwords do not match'; er.hidden = false; return; }
     b.disabled = true;
-    try { const j = await api('changePassword', { oldPassword:f.o.value, newPassword:f.n.value }); S.token = j.token; store.set('prt_token', j.token); closeDlg(); toast('Password changed'); }
+    try { const j = await api('changePassword', { oldPassword:f.o.value, newPassword:f.n.value }); S.token = j.token; store.set('prt_token', j.token); closeDlg(); celebrate('Password changed'); }
     catch(err){ er.textContent = err.message; er.hidden = false; b.disabled = false; }
   });
 }
@@ -1221,7 +1269,7 @@ function openUser(email){
       else { p.email = f.email.value.trim().toLowerCase(); await api('createUser', p); }
     } catch(err){ $('#fe').textContent = err.message; $('#fe').hidden = false; b.disabled = false; return; }
     if (p.password) showCreds(p.email, p.password, u ? 'Password updated' : 'Account created');
-    else { closeDlg(); toast('Account updated'); }
+    else { closeDlg(); celebrate('Account updated'); }
     try { S.users = (await api('listUsers')).users; paint(); } catch(err){ toast(err.message, true); }
   });
 }
@@ -1263,7 +1311,7 @@ async function addOne(ev){
   ev.preventDefault(); const f = ev.target, b = $('#addOneBtn'); b.disabled = true;
   try {
     await api('addEvents', { items:[{ name:f.name.value, category:readCat(f), venue:f.venue.value }] });
-    f.name.value = ''; f.venue.value = ''; toast('Event added'); await refresh(); f.name.focus();
+    f.name.value = ''; f.venue.value = ''; celebrate('Event added'); await refresh(); f.name.focus();
   } catch(e){ toast(e.message, true); }
   b.disabled = false;
 }
@@ -1297,7 +1345,7 @@ function openEventEdit(id){
     try {
       await api('updateEvent', { id, name:f.name.value, category:readCat(f), venue:f.venue.value,
         maxMark:f.maxMark.value, judges:f.judges.value, ptsFirst:f.ptsFirst.value, ptsSecond:f.ptsSecond.value, ptsThird:f.ptsThird.value });
-      closeDlg(); toast('Event updated'); await refresh();
+      closeDlg(); celebrate('Event updated'); await refresh();
     }
     catch(err){ $('#fe').textContent = err.message; $('#fe').hidden = false; b.disabled = false; }
   });
@@ -1326,7 +1374,7 @@ async function openCriteria(id){
       return { name: nameInp.value.trim(), max: Number(maxInp.value) };
     }).filter(x => x.name && x.max);
     const b = $('#sb'); b.disabled = true;
-    try { await api('setCriteria', { eventId:id, items }); closeDlg(); toast('Criteria saved'); await refresh(); }
+    try { await api('setCriteria', { eventId:id, items }); closeDlg(); celebrate('Criteria saved'); await refresh(); }
     catch(e){ toast(e.message, true); b.disabled = false; }
   };
 }
