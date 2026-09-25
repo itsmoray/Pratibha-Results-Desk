@@ -430,7 +430,8 @@ const ACT = { login:'Signed in', loginFailed:'Failed sign-in', logout:'Signed ou
   setCriteria:'Set judging criteria', addStudents:'Added roster students', updateStudent:'Edited student',
   deleteStudent:'Deleted student', addEntry:'Added participant', removeEntry:'Removed participant',
   saveMarks:'Saved marks', lockSubmission:'Submitted marks', unlockSubmission:'Unlocked marks',
-  declareFromMarks:'Declared result from marks', certStatus:'Certificate status', importOfficialEvents:'Loaded official event list' };
+  declareFromMarks:'Declared result from marks', certStatus:'Certificate status', importOfficialEvents:'Loaded official event list',
+  bulkSetMaxMark:'Set max mark for all events' };
 const ACT_BAD = ['loginFailed', 'deleteUser', 'deleteEvent'];
 const actLabel = a => ACT[a] || a;
 function fmtLog(iso){
@@ -617,6 +618,9 @@ async function setTab(k){
       <div class="actions" style="margin-top:4px"><button class="btn gold" id="addOneBtn">Add event</button></div></form>
       <div class="item" style="margin-bottom:14px"><h3>Official event list</h3><p class="meta" style="margin:4px 0 12px">Adds the 49 events from the guidelines (PAF 01 to 49) that are missing.</p>
       <button type="button" class="btn ghost" onclick="importOfficial()">Load official event list</button></div>
+      <details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Set max mark for all events</summary>
+      <p class="meta">Sets "Max mark per judge" on every event at once. Events with their own Criteria still total to their criteria's marks, not this number — edit those separately under Criteria.</p>
+      <div class="actions" style="justify-content:flex-start"><input id="bulkMax" type="number" min="1" max="1000" value="100" style="max-width:110px"><button type="button" class="btn ghost" id="bulkMaxBtn" onclick="bulkSetMaxMark()">Apply to all events</button></div></details>
       <details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Add many events at once</summary>
       <p class="meta">One event per line: Name | Category | Venue</p>
       <textarea id="bulk" rows="5" placeholder="Group Song | On-Stage Group | Main Auditorium"></textarea>
@@ -1276,6 +1280,18 @@ async function importOfficial(){
   if (!await confirmBox('Load the official event list?', 'Adds the events from the guidelines that are missing. Elocution, essays, poems, stories and recitation get one event per language. Old general events like "Elocution" or "Essay Writing" are removed only if they have no results or marks yet. Classical and folk dance get their judging criteria from the rules (10 marks each, editable).', 'Load events')) return;
   try { const j = await api('importOfficialEvents'); toast(j.added + ' events added, ' + j.removed + ' old removed'); await refresh(); }
   catch(e){ toast(e.message, true); }
+}
+async function bulkSetMaxMark(){
+  const v = Number($('#bulkMax').value);
+  if (!v || v <= 0) return toast('Enter a mark greater than 0', true);
+  if (!await confirmBox('Set max mark for every event?', `Every event\u2019s "Max mark per judge" becomes ${v}. Events with their own Criteria are not changed by this — their total still comes from their criteria.`, 'Apply to all events')) return;
+  const b = $('#bulkMaxBtn'); b.disabled = true;
+  try {
+    const j = await api('bulkSetMaxMark', { maxMark: v });
+    toast(plural(j.changed, 'event') + ' set to ' + v + (j.withCriteria ? '. ' + plural(j.withCriteria, 'event') + ' with their own criteria were left as is.' : ''), !!j.withCriteria);
+    await refresh();
+  } catch(e){ toast(e.message, true); }
+  b.disabled = false;
 }
 async function delEvent(id){
   const e = S.events.find(x => x.id === id);
