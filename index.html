@@ -383,9 +383,12 @@ async function api(action, payload = {}, silent){
   if (API_URL.startsWith('PASTE')) throw new Error('Set API_URL in index.html first');
   if (!silent){ pending++; $('#topbar').classList.add('on'); }
   try {
-    let res;
-    try { res = await fetch(API_URL, { method:'POST', redirect:'follow', body: JSON.stringify({ action, token:S.token, ...payload }) }); }
-    catch(e){ throw new Error('No connection. Check your internet and try again.'); }
+    let res, lastErr;
+    for (let attempt = 0; attempt < 3; attempt++){
+      try { res = await fetch(API_URL, { method:'POST', redirect:'follow', body: JSON.stringify({ action, token:S.token, ...payload }) }); lastErr = null; break; }
+      catch(e){ lastErr = e; if (attempt < 2) await new Promise(r => setTimeout(r, 600 * (attempt + 1))); }
+    }
+    if (lastErr) throw new Error('No connection. Check your internet — your entries are still on this screen, nothing was lost.');
     let j;
     try { j = await res.json(); } catch(e){ throw new Error('Server sent an unexpected reply. Check the web app deployment.'); }
     if (!j.ok){
@@ -925,8 +928,13 @@ async function openScoring(id){
   renderScoring(j);
 }
 function renderScoring(j, draft){
-  draft = draft || {};
   const ev = j.event, crit = j.criteria, cols = crit.length ? crit : [{ id:'_', name:'Overall mark', max:ev.maxMark }];
+  const draftKey = 'draft_' + ev.id + '_' + (S.me ? S.me.email : '');
+  let restored = false;
+  if (!draft){
+    try { const raw = store.get(draftKey); if (raw) { draft = JSON.parse(raw); restored = Object.keys(draft).length > 0; } } catch(e){}
+  }
+  draft = draft || {};
   const me = j.judges.find(jg => jg.email === S.me.email) || { locked:false }, dis = me.locked ? 'disabled' : '';
   const maxTotal = cols.reduce((a, c) => a + Number(c.max), 0);
   const rows = j.entries.map(r => {
@@ -947,6 +955,9 @@ function renderScoring(j, draft){
   <div class="mbar"><span class="hint" id="saveState"></span><button type="button" class="btn ghost" onclick="closeDlg()">Close</button>
   ${me.locked ? '' : `<button type="button" class="btn ghost" id="saveBtn">Save marks</button><button type="button" class="btn gold" id="lockBtn">Submit final marks</button>`}</div>`);
   dlg.style.maxWidth = '960px';
+  if (window._markAutosave) clearInterval(window._markAutosave);
+  if (window._markUnload) window.removeEventListener('beforeunload', window._markUnload);
+  if (restored) toast('Restored marks you had entered earlier but not saved');
   const rowsEl = () => [...dlg.querySelectorAll('#mtbl .mrow')];
   const inputs = () => [...dlg.querySelectorAll('#mtbl input[data-c]')];
   const calc = () => {
@@ -965,7 +976,9 @@ function renderScoring(j, draft){
     $('#mpi').style.width = n ? Math.round(full * 100 / n) + '%' : '0';
   };
   calc();
-  const dirty = () => { const s = $('#saveState'); if (s) s.textContent = 'Unsaved changes'; };
+  let hasUnsaved = false;
+  const persistDraft = () => { try { store.set(draftKey, JSON.stringify(draftNow())); } catch(e){} };
+  const dirty = () => { hasUnsaved = true; const s = $('#saveState'); if (s) s.textContent = 'Unsaved changes — saved locally too'; persistDraft(); };
   inputs().forEach((i, n, all) => {
     i.addEventListener('input', () => { calc(); dirty(); });
     i.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); (all[n + 1] || i).focus(); } });
@@ -975,7 +988,26 @@ function renderScoring(j, draft){
     return { chest: tr.dataset.chest, marks };
   }).filter(x => Object.keys(x.marks).length);
   const draftNow = () => { const d = {}; rowsEl().forEach(tr => tr.querySelectorAll('input[data-c]').forEach(i => { if (i.value !== '') d[tr.dataset.chest + '|' + i.dataset.c] = i.value; })); return d; };
-  const saveAll = async () => { const items = collect(); if (!items.length) return true; await api('saveAllMarks', { eventId: ev.id, items }); const s = $('#saveState'); if (s) s.textContent = 'Saved'; return true; };
+  const saveAll = async () => {
+    const items = collect();
+    if (!items.length) { hasUnsaved = false; store.del(draftKey); const s = $('#saveState'); if (s) s.textContent = ''; return true; }
+    await api('saveAllMarks', { eventId: ev.id, items }, true);
+    hasUnsaved = false; store.del(draftKey);
+    const s = $('#saveState'); if (s) s.textContent = 'Saved';
+    return true;
+  };
+  // Auto-save every 20s while marks are unsaved, quietly, so a judge who forgets to click Save is still covered.
+  window._markAutosave = setInterval(async () => {
+    if (!hasUnsaved || !dlg.open) return;
+    try { await saveAll(); } catch(e){ const s = $('#saveState'); if (s) s.textContent = 'Could not save yet — will keep trying (nothing lost, still saved locally)'; }
+  }, 20000);
+  // Warn before an accidental close/refresh while there is anything not yet confirmed saved on the server.
+  window._markUnload = e => { if (hasUnsaved){ e.preventDefault(); e.returnValue = ''; } };
+  window.addEventListener('beforeunload', window._markUnload);
+  dlg.addEventListener('close', () => {
+    if (window._markAutosave) clearInterval(window._markAutosave);
+    if (window._markUnload) window.removeEventListener('beforeunload', window._markUnload);
+  }, { once: true });
   const addBox = $('#addChest');
   if (addBox){
     wireLookup(addBox, $('#addLine'));
