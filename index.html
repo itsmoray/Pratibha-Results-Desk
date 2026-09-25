@@ -366,7 +366,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwXZfCpI8nqu6qrWPVbdcbv
 const POLL_MS = 30000;
 
 /* ====== STATE + HELPERS ====== */
-const S = { token:'', me:null, events:[], results:{}, students:[], houses:[], users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', q:'' };
+const S = { token:'', me:null, events:[], results:{}, students:[], houses:[], users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', q:'', rsort:'chest' };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store = {
@@ -405,7 +405,12 @@ async function api(action, payload = {}, silent){
     }
     if (lastErr) throw new Error('No connection. Check your internet — your entries are still on this screen, nothing was lost.');
     let j;
-    try { j = await res.json(); } catch(e){ throw new Error('Server sent an unexpected reply. Check the web app deployment.'); }
+    const raw = await res.text();
+    try { j = JSON.parse(raw); }
+    catch(e){
+      console.log('RAW RESPONSE for action "' + action + '" (status ' + res.status + '):', raw);
+      throw new Error('Server sent an unexpected reply. Check the web app deployment.');
+    }
     if (!j.ok){
       if (j.code === 'AUTH') endSession(j.error);
       throw new Error(j.error || 'Something went wrong');
@@ -599,10 +604,15 @@ async function setTab(k){
     v.innerHTML = `<p class="meta" style="margin-bottom:12px">Updates automatically as results are declared. <a href="#live" target="_blank" rel="noopener">Open the big-screen live view</a> (needs no login).</p><div id="list"></div>`;
   } else if (k === 'roster'){
     v.innerHTML = `${oneStudentForm()}<details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Add many students at once</summary>
-      <p class="meta">One student per line: Chest number | Name | Class | House | Gender (M or F). Leave House empty if Class is typed exactly as in the batch list: the house fills in by itself.</p><details style="margin-bottom:8px"><summary class="meta" style="cursor:pointer">Show class names</summary><p class="meta">${S.batches.map(b => esc(b.label)).join(' · ')}</p></details>
-      <textarea id="bulkStu" rows="5" placeholder="101 | Anjali Menon | S5 BCA | Shadjam | F"></textarea>
+      <p class="meta">One student per line: Chest number | Name | Class | House | Gender (M or F) | Stage (On-stage, Off-stage or Both). Leave House empty if Class is typed exactly as in the batch list: the house fills in by itself. Stage can be left blank too.</p><details style="margin-bottom:8px"><summary class="meta" style="cursor:pointer">Show class names</summary><p class="meta">${S.batches.map(b => esc(b.label)).join(' · ')}</p></details>
+      <textarea id="bulkStu" rows="5" placeholder="101 | Anjali Menon | S5 BCA | Shadjam | F | Off-stage"></textarea>
       <div class="actions"><button type="button" class="btn ghost" id="addStuBtn" onclick="addStudentsBulk()">Add students</button></div></details>
-      <div class="controls"><input id="q" type="search" placeholder="Search roster" oninput="S.q=this.value;paint()"></div><div id="list" class="list"></div>`;
+      <div class="controls"><input id="q" type="search" placeholder="Search roster" oninput="S.q=this.value;paint()">
+      <select id="rosterSort" onchange="S.rsort=this.value;paint()">
+        <option value="chest">Sort: Chest no.</option><option value="name">Sort: Name</option><option value="house">Sort: House</option><option value="cls">Sort: Class</option>
+      </select>
+      <div class="chips">${['all','on','off','both'].map(f => `<button class="chip" data-f="${f}" aria-pressed="${f==='all'}" onclick="setFilter('${f}')">${{all:'All',on:'On-stage',off:'Off-stage',both:'Both'}[f]}</button>`).join('')}</div></div>
+      <div id="list" class="list"></div>`;
     wireOneStudent();
   } else if (k === 'board'){
     const canX = role() === 'admin' || role() === 'committee' || role() === 'viewer';
@@ -689,10 +699,17 @@ function paint(){
   }
   else if (S.tab === 'roster'){
     const q = S.q.trim().toLowerCase();
-    const list = S.students.filter(s => !q || (s.chest + ' ' + s.name + ' ' + s.cls + ' ' + s.house).toLowerCase().includes(q));
+    const stageMap = { on:'On-stage', off:'Off-stage', both:'Both' };
+    let list = S.students.filter(s => !q || (s.chest + ' ' + s.name + ' ' + s.cls + ' ' + s.house).toLowerCase().includes(q));
+    if (S.filter !== 'all') list = list.filter(s => s.stage === stageMap[S.filter]);
+    const sortKey = { chest:'chest', name:'name', house:'house', cls:'cls' }[S.rsort] || 'chest';
+    list = list.slice().sort((a, b) => sortKey === 'chest'
+      ? String(a.chest).localeCompare(String(b.chest), undefined, { numeric:true })
+      : String(a[sortKey] || '').localeCompare(String(b[sortKey] || '')));
     L.innerHTML = list.length ? list.map(s => `<div class="item"><div class="row"><h3>${esc(s.name)}</h3>
       <span class="pill wait">#${esc(s.chest)}</span></div>
       <div class="meta">${esc([s.cls, s.house].filter(Boolean).join(', '))}</div>
+      ${s.stage ? `<span class="cat ${stageCls(s.stage)}" style="margin-top:8px;display:inline-block">${esc(s.stage)}</span>` : ''}
       <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openStudentEdit('${esc(s.chest)}')">Edit</button>
       <button class="btn ghost small" onclick="delStudent('${esc(s.chest)}')">Delete</button></div></div>`).join('')
       : '<div class="empty">No students on the roster yet. Add them above.</div>';
@@ -853,7 +870,8 @@ function oneStudentForm(){
   ${classCascadeHTML('os')}
   <input type="hidden" name="cls">
   <div class="inline"><label style="flex:1">House <select name="house"><option value="">Choose…</option>${HOUSES_UI.map(x => `<option>${x}</option>`).join('')}</select></label>
-  <label style="flex:1">Gender <select name="gender"><option value="">Not set</option><option value="F">Female</option><option value="M">Male</option></select></label></div>
+  <label style="flex:1">Gender <select name="gender"><option value="">Not set</option><option value="F">Female</option><option value="M">Male</option></select></label>
+  <label style="flex:1">Stage <select name="stage"><option value="">Not set</option>${STAGES_UI.map(x => `<option>${x}</option>`).join('')}</select></label></div>
   <div class="hint" id="osHint"></div>
   <div class="actions"><button class="btn gold" id="osb">Add student</button></div></form></details>`;
 }
@@ -863,7 +881,7 @@ function wireOneStudent(){
   f.addEventListener('submit', async ev => {
     ev.preventDefault(); const b = $('#osb'); b.disabled = true;
     try {
-      const j = await api('addStudents', { items:[{ chest:f.chest.value, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value }] });
+      const j = await api('addStudents', { items:[{ chest:f.chest.value, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value, stage:f.stage.value }] });
       toast(j.added ? 'Student added' : 'Chest number already existed, details updated');
       // Drop the saved student straight into the list instead of re-downloading the whole roster (and
       // every other sheet) — that round trip is what was making one-by-one adds feel slow.
@@ -875,7 +893,7 @@ function wireOneStudent(){
 }
 async function addStudentsBulk(){
   const items = $('#bulkStu').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
-    const p = l.split('|').map(x => x.trim()); return { chest:p[0], name:p[1] || '', cls:p[2] || '', house:p[3] || '', gender:p[4] || '' };
+    const p = l.split('|').map(x => x.trim()); return { chest:p[0], name:p[1] || '', cls:p[2] || '', house:p[3] || '', gender:p[4] || '', stage:p[5] || '' };
   });
   if (!items.length) return toast('Type at least one student first', true);
   const b = $('#addStuBtn'); b.disabled = true;
@@ -897,12 +915,13 @@ function openStudentEdit(chest){
   ${s.cls ? `<div class="hint">Currently: ${esc(s.cls)}${!S.batches.find(b => b.label.toLowerCase() === s.cls.trim().toLowerCase()) ? " (doesn't match the course list — pick one above to replace it, or leave as is)" : ''}</div>` : ''}
   <label>House <input name="house" value="${esc(s.house)}" list="houseDL"></label>
   <label>Gender <select name="gender"><option value="">Not set</option><option value="F" ${s.gender === 'F' ? 'selected' : ''}>Female</option><option value="M" ${s.gender === 'M' ? 'selected' : ''}>Male</option></select></label>
+  <label>Stage <select name="stage"><option value="">Not set</option>${STAGES_UI.map(x => `<option ${s.stage === x ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
   <datalist id="houseDL">${HOUSES_UI.map(h => `<option value="${esc(h)}">`).join('')}</datalist>
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">Save changes</button></div></form>`);
   wireClassCascade($('#sf'), 'sf', hh => { if (hh) $('#sf').house.value = hh; }).setFromCls(s.cls);
   $('#sf').addEventListener('submit', async ev => {
     ev.preventDefault(); const f = ev.target, b = $('#sb'), er = $('#fe'); er.hidden = true; b.disabled = true;
-    try { await api('updateStudent', { chest, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value }); closeDlg(); toast('Student updated'); await refresh(); }
+    try { await api('updateStudent', { chest, name:f.name.value, cls:f.cls.value, house:f.house.value, gender:f.gender.value, stage:f.stage.value }); closeDlg(); toast('Student updated'); await refresh(); }
     catch(err){ er.textContent = err.message; er.hidden = false; b.disabled = false; }
   });
 }
@@ -912,6 +931,8 @@ async function delStudent(chest){
   try { await api('deleteStudent', { chest }); toast('Student deleted'); await refresh(); } catch(e){ toast(e.message, true); }
 }
 const HOUSES_UI = ['Shadjam','Rishabham','Gandharam','Madhyamam','Panchamam','Dhaivatam','Nishadam'];
+const STAGES_UI = ['On-stage','Off-stage','Both'];
+const stageCls = s => s === 'On-stage' ? 'on' : s === 'Off-stage' ? 'off' : s === 'Both' ? 'grp' : '';
 
 /* ====== JUDGING (admin/committee review + declare) ====== */
 const whoCell = r => r.missing
