@@ -1525,7 +1525,7 @@ async function openCriteria(id){
   };
 }
 async function importOfficial(){
-  if (!await confirmBox('Load the official event list?', 'Adds the events from the guidelines that are missing. Elocution, essays, poems, stories and recitation get one event per language. Old general events like "Elocution" or "Essay Writing" are removed only if they have no results or marks yet. Classical and folk dance get their judging criteria from the rules (10 marks each, editable).', 'Load events')) return;
+  if (!await confirmBox('Load the official event list?', 'Adds the events from the guidelines that are missing. Elocution, essays, poems, stories and recitation get one event per language. Old general events like "Elocution" or "Essay Writing" are removed only if they have no results or marks yet. Vocal, dance, debate, elocution, recitation, mono act and mimicry events get their judging criteria from the fest\u2019s judging-criteria sheets (5 criteria of 10 marks each, 50 total, editable).', 'Load events')) return;
   try { const j = await api('importOfficialEvents'); toast(j.added + ' events added, ' + j.removed + ' old removed'); await refresh(); }
   catch(e){ toast(e.message, true); }
 }
