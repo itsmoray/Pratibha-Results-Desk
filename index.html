@@ -45,7 +45,7 @@ fieldset input{margin-top:8px}
 .errTxt{color:var(--danger);font-weight:600}
 
 /* buttons */
-.btn{border:0;border-radius:8px;padding:11px 16px;font-weight:600;background:var(--ink);color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;text-align:center;line-height:1.25;border:0;border-radius:8px;padding:11px 16px;font-weight:600;background:var(--ink);color:#fff}
 .btn:disabled{opacity:.6;cursor:wait}
 .btn.gold{background:var(--gold);color:var(--ink)}
 .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
@@ -110,6 +110,10 @@ button.item:hover{border-color:var(--ink)}
 .empty{background:var(--card);border:1.5px dashed var(--line);border-radius:12px;padding:26px 18px;text-align:center;color:var(--muted)}
 .waiting{font-size:14px;color:var(--muted);margin-top:16px}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+/* action-button groups on list cards (roster, events, accounts) — grid keeps every button the same height and evenly spaced, however many there are or however long the labels get */
+.cardacts{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.cardacts-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:8px}
+.cardacts-row .btn,.cardacts>.btn{width:100%}
 .bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 
 /* dialog */
@@ -887,11 +891,11 @@ function paint(){
       <div class="meta">${esc([s.cls, s.house].filter(Boolean).join(', '))}</div>
       ${s.stage ? `<span class="cat ${stageCls(s.stage)}" style="margin-top:8px;display:inline-block">${esc(s.stage)}</span>` : ''}
       ${s.linkedTo ? `<div class="note" style="margin-top:8px">Points combine into chest #${esc(s.linkedTo)}</div>` : ''}
-      <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openStudentEdit('${esc(s.chest)}')">Edit</button>
+      <div class="cardacts"><div class="cardacts-row"><button class="btn ghost small" onclick="openStudentEdit('${esc(s.chest)}')">Edit</button>
       <button class="btn ghost small" onclick="openStudentReport('${esc(s.chest)}')">Report</button>
+      <button class="btn ghost small" onclick="delStudent('${esc(s.chest)}')">Delete</button></div>
       ${s.linkedTo ? `<button class="btn ghost small" onclick="unlinkStudent('${esc(s.chest)}')">Unlink</button>`
-                   : `<button class="btn ghost small" onclick="openLinkStudent('${esc(s.chest)}')">Same student, other chest no.</button>`}
-      <button class="btn ghost small" onclick="delStudent('${esc(s.chest)}')">Delete</button></div></div>`).join('')
+                   : `<button class="btn ghost small" onclick="openLinkStudent('${esc(s.chest)}')">Same student, other chest no.</button>`}</div></div>`).join('')
       : '<div class="empty">No students on the roster yet. Add them above.</div>';
   }
   else if (S.tab === 'board'){
@@ -923,8 +927,8 @@ function paint(){
     L.innerHTML = S.users.length ? S.users.map(u => `<div class="item"><div class="row"><h3>${esc(u.name)}</h3>
       <span class="pill ${u.active ? 'done' : 'off'}">${u.active ? esc(cap(u.role)) : 'Disabled'}</span></div>
       <div class="meta">${esc(u.email)}${(u.role === 'judge') ? ', ' + (u.events === 'ALL' ? 'all events' : plural(u.events ? u.events.split(',').length : 0, 'event')) : ''}</div>
-      <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openUser('${esc(u.email)}')">Edit</button>
-      ${u.email === S.me.email ? '' : `<button class="btn ghost small" onclick="delUser('${esc(u.email)}')">Delete</button>`}</div></div>`).join('')
+      <div class="cardacts"><div class="cardacts-row"><button class="btn ghost small" onclick="openUser('${esc(u.email)}')">Edit</button>
+      ${u.email === S.me.email ? '' : `<button class="btn ghost small" onclick="delUser('${esc(u.email)}')">Delete</button>`}</div></div></div>`).join('')
       : '<div class="empty">No accounts yet.</div>';
   }
   else if (S.tab === 'manage'){
@@ -932,9 +936,9 @@ function paint(){
     L.innerHTML = list.length ? list.map(e => `<div class="item"><div class="row"><h3>${esc(e.name)}</h3>
       <span class="pill ${isDone(e.id) ? 'done' : 'wait'}">${isDone(e.id) ? 'Declared' : 'Pending'}</span></div>
       <div class="meta">${esc(e.id)}${e.category ? ', ' + esc(e.category) : ''}${e.venue ? ', ' + esc(e.venue) : ''}</div><div class="tagRow"><span class="tag">${e.judgesNeeded ? e.judgeCount + ' of ' + plural(e.judgesNeeded, 'judge') : plural(e.judgeCount, 'judge')}</span><span class="tag">${e.criteriaCount ? plural(e.criteriaCount, 'criterion') : 'One mark out of ' + e.maxMark}</span></div>
-      <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openEditor('${e.id}')">${isDone(e.id) ? 'View / edit result' : 'Enter result'}</button><button class="btn ghost small" onclick="openEventEdit('${e.id}')">Edit</button><button class="btn ghost small" onclick="openCriteria('${e.id}')">Criteria</button>
+      <div class="cardacts"><button class="btn ghost small" onclick="openEditor('${e.id}')">${isDone(e.id) ? 'View / edit result' : 'Enter result'}</button><div class="cardacts-row"><button class="btn ghost small" onclick="openEventEdit('${e.id}')">Edit</button><button class="btn ghost small" onclick="openCriteria('${e.id}')">Criteria</button>
       <button class="btn ghost small" onclick="printEventReport('${e.id}')">Report</button>
-      <button class="btn ghost small" onclick="delEvent('${e.id}')">Delete</button></div></div>`).join('')
+      <button class="btn ghost small" onclick="delEvent('${e.id}')">Delete</button></div></div></div>`).join('')
       : '<div class="empty">No events yet. Add your event list above.</div>';
   }
   else if (S.tab === 'log'){
