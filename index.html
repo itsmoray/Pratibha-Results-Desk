@@ -393,7 +393,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwXZfCpI8nqu6qrWPVbdcbv
 const POLL_MS = 30000;
 
 /* ====== STATE + HELPERS ====== */
-const S = { token:'', me:null, events:[], results:{}, students:[], studentsVer:'', houses:[], users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', q:'', rsort:'chest' };
+const S = { token:'', me:null, events:[], results:{}, students:[], studentsVer:'', houses:[], users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', stage:'all', q:'', rsort:'chest' };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store = {
@@ -704,7 +704,7 @@ function buildTabs(){
   setTab(t[0][0]);
 }
 async function setTab(k){
-  S.tab = k; S.filter = 'all'; S.q = '';
+  S.tab = k; S.filter = 'all'; S.stage = 'all'; S.q = '';
   document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
   const nav = $('#tabs'), cur = nav.querySelector('[aria-selected=true]');
   if (cur) nav.scrollTo({ left: cur.offsetLeft - (nav.clientWidth - cur.offsetWidth) / 2, behavior:'smooth' });
@@ -713,10 +713,12 @@ async function setTab(k){
   if (k === 'dash'){ v.innerHTML = '<div id="list"></div>'; }
   else if (k === 'enter'){
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search events" oninput="S.q=this.value;paint()">
-      <div class="chips">${['all','pending','declared'].map(f => `<button class="chip" data-f="${f}" aria-pressed="${f==='all'}" onclick="setFilter('${f}')">${f[0].toUpperCase()+f.slice(1)}</button>`).join('')}</div></div><div id="list" class="list"></div>`;
+      <div class="chips">${['all','pending','declared'].map(f => `<button class="chip" data-f="${f}" aria-pressed="${f==='all'}" onclick="setFilter('${f}')">${f[0].toUpperCase()+f.slice(1)}</button>`).join('')}</div>
+      <div class="chips">${['all','on','off'].map(f => `<button class="chip" data-sf="${f}" aria-pressed="${f==='all'}" onclick="setStage('${f}')">${{all:'All stages',on:'On-stage',off:'Off-stage'}[f]}</button>`).join('')}</div></div><div id="list" class="list"></div>`;
   } else if (k === 'score'){
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search events" oninput="S.q=this.value;paint()">
-      <div class="chips">${['all','pending','declared'].map(f => `<button class="chip" data-f="${f}" aria-pressed="${f==='all'}" onclick="setFilter('${f}')">${f[0].toUpperCase()+f.slice(1)}</button>`).join('')}</div></div><div id="list" class="list"></div>`;
+      <div class="chips">${['all','pending','declared'].map(f => `<button class="chip" data-f="${f}" aria-pressed="${f==='all'}" onclick="setFilter('${f}')">${f[0].toUpperCase()+f.slice(1)}</button>`).join('')}</div>
+      <div class="chips">${['all','on','off'].map(f => `<button class="chip" data-sf="${f}" aria-pressed="${f==='all'}" onclick="setStage('${f}')">${{all:'All stages',on:'On-stage',off:'Off-stage'}[f]}</button>`).join('')}</div></div><div id="list" class="list"></div>`;
   } else if (k === 'house'){
     v.innerHTML = `<p class="meta" style="margin-bottom:12px">Updates automatically as results are declared. <a href="#live" target="_blank" rel="noopener">Open the big-screen live view</a> (needs no login).</p><div id="list"></div>`;
   } else if (k === 'roster'){
@@ -737,6 +739,7 @@ async function setTab(k){
       ${canX ? '<button class="btn gold" onclick="exportXlsx()">Download Excel</button>' : ''}</div><div id="list" class="list"></div><p class="waiting" id="waiting"></p>`;
   } else if (k === 'certs'){
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search event or winner" oninput="S.q=this.value;paint()">
+      <div class="chips">${['all','on','off'].map(f => `<button class="chip" data-sf="${f}" aria-pressed="${f==='all'}" onclick="setStage('${f}')">${{all:'All stages',on:'On-stage',off:'Off-stage'}[f]}</button>`).join('')}</div>
       <button class="btn gold" onclick="exportCerts()">Download Excel</button><button class="btn ghost" onclick="window.print()">Print</button></div>
       <p class="meta" style="margin-bottom:12px">Every declared winner with the details for announcements and certificates. New results appear here automatically, newest first.</p><div id="list" class="list"></div>`;
   } else if (k === 'users'){
@@ -779,7 +782,16 @@ async function loadLog(){
 }
 function setFilter(f){
   S.filter = f;
-  document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.f === f));
+  document.querySelectorAll('[data-f]').forEach(c => c.setAttribute('aria-pressed', c.dataset.f === f));
+  paint();
+}
+// On-stage / off-stage grouping for events, used to sort the "All events" and "Judge marks"
+// lists — an event's category is one of Off-Stage, Off-Stage Group, On-Stage Individual,
+// On-Stage Group, so group-vs-individual doesn't matter here, only which stage it's on.
+const eventStage = e => /^on-stage/i.test(e.category || '') ? 'on' : /^off-stage/i.test(e.category || '') ? 'off' : '';
+function setStage(f){
+  S.stage = f;
+  document.querySelectorAll('[data-sf]').forEach(c => c.setAttribute('aria-pressed', c.dataset.sf === f));
   paint();
 }
 
@@ -795,7 +807,8 @@ function paint(){
   if (S.tab === 'dash'){ paintDash(L); }
   else if (S.tab === 'enter'){
     const list = S.events.filter(e => e.canEdit && match(e) &&
-      (S.filter === 'all' || (S.filter === 'declared') === isDone(e.id)));
+      (S.filter === 'all' || (S.filter === 'declared') === isDone(e.id)) &&
+      (S.stage === 'all' || eventStage(e) === S.stage));
     if (!list.length){
       const none = !S.events.some(e => e.canEdit);
       L.innerHTML = `<div class="empty">${none ? 'No events are assigned to you yet. Ask the admin to assign your events.' : 'No events match.'}</div>`; return;
@@ -804,7 +817,8 @@ function paint(){
   }
   else if (S.tab === 'score'){
     const list = S.events.filter(e => e.isJudge && match(e) &&
-      (S.filter === 'all' || (S.filter === 'declared') === isDone(e.id)));
+      (S.filter === 'all' || (S.filter === 'declared') === isDone(e.id)) &&
+      (S.stage === 'all' || eventStage(e) === S.stage));
     if (!list.length){
       const none = !S.events.some(e => e.isJudge);
       L.innerHTML = `<div class="empty">${none ? 'No events are assigned to you for judging yet. Ask the admin to assign you.' : 'No events match.'}</div>`; return;
@@ -847,7 +861,8 @@ function paint(){
   }
   else if (S.tab === 'certs'){
     const q = S.q.trim().toLowerCase();
-    const rows = certRows().filter(x => !q || (x.event + ' ' + x.name + ' ' + x.house + ' ' + x.cls).toLowerCase().includes(q));
+    const rows = certRows().filter(x => (!q || (x.event + ' ' + x.name + ' ' + x.house + ' ' + x.cls).toLowerCase().includes(q)) &&
+      (S.stage === 'all' || eventStage(x) === S.stage));
     const by = {}; rows.forEach(x => (by[x.event] = by[x.event] || []).push(x));
     const evs = Object.keys(by).sort((a, b) => (by[b][0].at || '').localeCompare(by[a][0].at || ''));
     L.innerHTML = evs.length ? evs.map(n => `<div class="item"><div class="row"><h3>${esc(n)}</h3><span class="pill done">${esc(fmtTime(by[n][0].at))}</span></div>
