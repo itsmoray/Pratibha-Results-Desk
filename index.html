@@ -1201,7 +1201,12 @@ function renderScoring(j, draft){
   <div class="mprog"><div class="mpb"><i id="mpi"></i></div><span class="hint" id="cnt" style="margin:0"></span></div>
   ${me.locked ? '<p class="err">You have submitted your marks for this event. Ask an admin to unlock them if you need to change something.</p>' : ''}
   ${me.locked ? '' : `<div class="fld"><span>Add students by chest number</span><input id="addChest" inputmode="numeric" placeholder="Scan or type, then Enter. Several numbers are fine (space or comma between)" list="studentsDL" autocomplete="off">
-    <div id="addLine"></div></div>${studentsDL()}`}
+    <div id="addLine"></div>
+    <button type="button" class="btn ghost small" id="bulkToggle" style="margin-top:8px">Paste a list instead</button>
+    <div id="bulkBox" hidden style="margin-top:8px">
+      <textarea id="addChestsBulk" rows="4" placeholder="Paste chest numbers here — one per line, or separated by spaces/commas"></textarea>
+      <button type="button" class="btn ghost small" id="bulkAddBtn" style="margin-top:8px">Add all</button>
+    </div></div>${studentsDL()}`}
   <div class="mlist" id="mtbl">${rows || '<p class="hint">No students yet. Scan or type their chest numbers above.</p>'}</div>
   <div class="mbar"><span class="hint" id="saveState"></span><button type="button" class="btn ghost" onclick="closeDlg()">Close</button>
   ${me.locked ? '' : `<button type="button" class="btn ghost" id="saveBtn">Save marks</button><button type="button" class="btn gold" id="lockBtn">Submit final marks</button>`}</div>`);
@@ -1274,40 +1279,69 @@ function renderScoring(j, draft){
     saveAll().then(() => { const s = $('#saveState'); if (s) s.textContent = 'Saved'; })
       .catch(() => { const s = $('#saveState'); if (s) s.textContent = netMsg(); });
   }
-  const addBox = $('#addChest');
+  const addBox = $('#addChest'), bulkToggle = $('#bulkToggle'), bulkBox = $('#bulkBox'), bulkArea = $('#addChestsBulk'), bulkBtn = $('#bulkAddBtn');
+  const addLine = $('#addLine');
+  let addBusy = false;
+  // Shared by both the single scan/type field and the bulk-paste box below it, so an add from
+  // either one locks both, shows the same status line, and merges the new rows the same way.
+  const runAdd = async chests => {
+    addBusy = true;
+    if (addBox) addBox.disabled = true;
+    if (bulkArea) bulkArea.disabled = true;
+    if (bulkBtn) bulkBtn.disabled = true;
+    addLine.innerHTML = `<div class="lookup">Adding ${plural(chests.length, 'student')}…</div>`;
+    try {
+      const a = await api('addEntries', { eventId: ev.id, chests });
+      if (a.missing.length) toast('Not on the roster: ' + a.missing.join(', '), true); else if (a.warn) toast(a.warn, true); else toast(plural(a.added, 'student') + ' added');
+      // Drop the new rows straight into the list already on screen instead of making a second
+      // round trip to re-fetch the whole event — this is what was making adding a student feel
+      // slow, since every add used to wait on two server calls back to back instead of one.
+      const have = new Set(j.entries.map(r => r.chest));
+      chests.forEach(c => {
+        if (have.has(c) || a.missing.indexOf(c) > -1) return;
+        const s = studentBy(c);
+        j.entries.push({ chest:c, name: s ? s.name : ('#' + c), cls: s ? s.cls : '', house: s ? s.house : '',
+          missing: !s, perJudge: { [S.me.email]: null }, mineCrit: {}, avg: null, rank: null });
+        have.add(c);
+      });
+      j.entries.sort((a2, b2) => String(a2.chest).localeCompare(String(b2.chest), undefined, { numeric:true }));
+      const d = draftNow(); renderScoring(j, d); const b2 = $('#addChest'); if (b2) b2.focus();
+    } catch(err){
+      toast(err.message, true);
+      addBusy = false; addLine.innerHTML = '';
+      if (addBox) addBox.disabled = false;
+      if (bulkArea) bulkArea.disabled = false;
+      if (bulkBtn) bulkBtn.disabled = false;
+      throw err;
+    }
+  };
   if (addBox){
-    const addLine = $('#addLine');
     wireLookup(addBox, addLine);
-    let addBusy = false;
     addBox.addEventListener('keydown', async e => {
       if (e.key !== 'Enter' || addBusy) return; e.preventDefault();
       const chests = addBox.value.split(/[\s,;]+/).filter(Boolean); if (!chests.length) return;
       // Lock the field and clear it right away — before the network call — so pressing Enter
       // again (or a barcode scanner firing a second scan) can't queue up a repeat add while the
       // first one is still in flight, and so there's an immediate sign the entry was received.
-      addBusy = true; addBox.disabled = true; addBox.value = '';
-      addLine.innerHTML = `<div class="lookup">Adding ${plural(chests.length, 'student')}…</div>`;
-      try {
-        const a = await api('addEntries', { eventId: ev.id, chests });
-        if (a.missing.length) toast('Not on the roster: ' + a.missing.join(', '), true); else if (a.warn) toast(a.warn, true); else toast(plural(a.added, 'student') + ' added');
-        // Drop the new rows straight into the list already on screen instead of making a second
-        // round trip to re-fetch the whole event — this is what was making adding a student feel
-        // slow, since every add used to wait on two server calls back to back instead of one.
-        const have = new Set(j.entries.map(r => r.chest));
-        chests.forEach(c => {
-          if (have.has(c) || a.missing.indexOf(c) > -1) return;
-          const s = studentBy(c);
-          j.entries.push({ chest:c, name: s ? s.name : ('#' + c), cls: s ? s.cls : '', house: s ? s.house : '',
-            missing: !s, perJudge: { [S.me.email]: null }, mineCrit: {}, avg: null, rank: null });
-          have.add(c);
-        });
-        j.entries.sort((a2, b2) => String(a2.chest).localeCompare(String(b2.chest), undefined, { numeric:true }));
-        const d = draftNow(); renderScoring(j, d); const b2 = $('#addChest'); if (b2) b2.focus();
-      } catch(err){
-        toast(err.message, true); addBusy = false; addBox.disabled = false; addLine.innerHTML = '';
-        addBox.value = chests.join(' '); addBox.focus();
-      }
+      addBox.value = '';
+      try { await runAdd(chests); }
+      catch(err){ addBox.value = chests.join(' '); addBox.focus(); }
     });
+  }
+  if (bulkToggle && bulkBox){
+    bulkToggle.onclick = () => {
+      bulkBox.hidden = !bulkBox.hidden;
+      bulkToggle.textContent = bulkBox.hidden ? 'Paste a list instead' : 'Use the single field instead';
+      if (!bulkBox.hidden && bulkArea) bulkArea.focus();
+    };
+  }
+  if (bulkBtn && bulkArea){
+    bulkBtn.onclick = async () => {
+      if (addBusy) return;
+      const chests = bulkArea.value.split(/[\s,;]+/).filter(Boolean); if (!chests.length) return;
+      try { await runAdd(chests); bulkArea.value = ''; }
+      catch(err){ /* keep what they pasted so they can fix and retry */ }
+    };
   }
   const sb = $('#saveBtn');
   if (sb) sb.onclick = async () => { sb.disabled = true; try { if (!collect().length) toast('Enter a mark first', true); else { await saveAll(); celebrate('Marks saved'); } } catch(e){ toast(e.message, true); } sb.disabled = false; };
