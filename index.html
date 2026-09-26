@@ -492,7 +492,7 @@ paintNet();
 
 let pending = 0;
 const LOAD_LABELS = {
-  addStudent:'Saving student…', bulkAddStudents:'Adding students…', updateStudent:'Saving changes…', deleteStudent:'Removing student…',
+  addStudent:'Saving student…', bulkAddStudents:'Adding students…', updateStudent:'Saving changes…', deleteStudent:'Removing student…', clearStudents:'Clearing the roster…',
   linkStudent:'Linking chest numbers…', unlinkStudent:'Unlinking…', studentReport:'Loading report…',
   saveMarks:'Saving marks…', lockSubmission:'Submitting marks…', unlockSubmission:'Unlocking…', declareFromMarks:'Declaring result…',
   saveResult:'Saving result…', addEvent:'Adding event…', addEvents:'Adding events…', updateEvent:'Saving event…', deleteEvent:'Removing event…',
@@ -573,7 +573,7 @@ const ACT = { login:'Signed in', loginFailed:'Failed sign-in', logout:'Signed ou
   saveResult:'Saved result', createUser:'Created account', updateUser:'Updated account', deleteUser:'Deleted account',
   addEvents:'Added events', updateEvent:'Edited event', deleteEvent:'Deleted event',
   setCriteria:'Set judging criteria', addStudents:'Added roster students', updateStudent:'Edited student',
-  deleteStudent:'Deleted student', linkStudent:'Linked chest numbers', unlinkStudent:'Unlinked chest numbers',
+  deleteStudent:'Deleted student', clearStudents:'Cleared the roster', linkStudent:'Linked chest numbers', unlinkStudent:'Unlinked chest numbers',
   addEntry:'Added participant', removeEntry:'Removed participant',
   saveMarks:'Saved marks', lockSubmission:'Submitted marks', unlockSubmission:'Unlocked marks',
   declareFromMarks:'Declared result from marks', certStatus:'Certificate status', importOfficialEvents:'Loaded official event list',
@@ -637,6 +637,23 @@ function confirmBox(title, msg, okLabel){
   });
 }
 function closeDlg(){ if (dlg.open) dlg.close(); }
+/* Like confirmBox, but for actions too destructive for a single click — the OK button stays
+   disabled until the person types the exact word back, e.g. "DELETE". */
+function confirmTyped(title, msg, requireWord, okLabel){
+  return new Promise(res => {
+    let done = false;
+    const fin = v => { if (done) return; done = true; dlg.removeEventListener('close', onClose); res(v); };
+    const onClose = () => fin(false);
+    dlg.addEventListener('close', onClose);
+    openDlg(`<h2>${esc(title)}</h2><p class="sub">${esc(msg)}</p>
+      <label>Type ${esc(requireWord)} to confirm <input id="ctWord" autocomplete="off" spellcheck="false"></label>
+      <div class="actions"><button type="button" class="btn ghost" id="cn">Cancel</button><button type="button" class="btn danger" id="cy" disabled>${esc(okLabel)}</button></div>`);
+    const w = $('#ctWord'), y = $('#cy');
+    w.oninput = () => { y.disabled = w.value.trim() !== requireWord; };
+    $('#cn').onclick = () => closeDlg();
+    y.onclick = () => { fin(true); closeDlg(); };
+  });
+}
 
 /* ====== AUTH ====== */
 $('#loginForm').addEventListener('submit', async e => {
@@ -775,6 +792,9 @@ async function setTab(k){
       <p class="meta">One student per line: Chest number | Name | Class | House | Gender (M or F) | Stage (On-stage, Off-stage or Both). Leave House empty if Class is typed exactly as in the batch list: the house fills in by itself. Stage can be left blank too.</p><details style="margin-bottom:8px"><summary class="meta" style="cursor:pointer">Show class names</summary><p class="meta">${S.batches.map(b => esc(b.label)).join(' · ')}</p></details>
       <textarea id="bulkStu" rows="5" placeholder="101 | Anjali Menon | S5 BCA | Shadjam | F | Off-stage"></textarea>
       <div class="actions"><button type="button" class="btn ghost" id="addStuBtn" onclick="addStudentsBulk()">Add students</button></div></details>
+      <details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Danger zone</summary>
+      <p class="meta">Removes every student on the roster in one go — chest numbers, names, classes, houses, all of it. Events, saved marks and declared results are kept, but they'll show their chest numbers as no longer on the roster until students are re-added. This cannot be undone.</p>
+      <div class="actions" style="justify-content:flex-start"><button type="button" class="btn danger" id="clearRosterBtn" onclick="clearAllStudents()">Clear all students</button></div></details>
       <div class="controls"><input id="q" type="search" placeholder="Search roster" oninput="S.q=this.value;paint()">
       <select id="rosterSort" onchange="S.rsort=this.value;paint()">
         <option value="chest">Sort: Chest no.</option><option value="name">Sort: Name</option><option value="house">Sort: House</option><option value="cls">Sort: Class</option>
@@ -1134,6 +1154,22 @@ async function delStudent(chest){
   const s = studentBy(chest);
   if (!await confirmBox('Delete student?', (s ? s.name : chest) + ' will be removed from the roster.', 'Delete student')) return;
   try { await api('deleteStudent', { chest }); toast('Student deleted'); await refresh(); } catch(e){ toast(e.message, true); }
+}
+async function clearAllStudents(){
+  const n = S.students.length;
+  if (!n) return toast('The roster is already empty');
+  const ok = await confirmTyped('Clear the entire roster?',
+    `This permanently removes all ${plural(n, 'student')} from the roster. This cannot be undone.`,
+    'DELETE', 'Clear all students');
+  if (!ok) return;
+  const b = $('#clearRosterBtn'); if (b) b.disabled = true;
+  try {
+    await api('clearStudents', { expectCount: n });
+    S.students = [];
+    toast('Roster cleared');
+    await refresh();
+  } catch(e){ toast(e.message, true); }
+  if (b) b.disabled = false;
 }
 // Same person, different chest number in another event: link the two so their points add up as one
 // student in the Individual Championship, instead of being split across two roster rows.
