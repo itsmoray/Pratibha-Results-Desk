@@ -342,6 +342,38 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
 .mx{grid-column:1/-1;justify-self:start;border:0;background:none;padding:0;color:var(--danger);font-weight:700;font-size:13px}
 .mbar{position:sticky;bottom:-26px;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;margin:16px -24px -26px;padding:12px 24px;background:var(--card);border-top:1px solid var(--line)}
 .mbar .hint{margin:0 auto 0 0}
+
+/* ===== PUBLIC LIVE SCOREBOARD (no login, meant for a projector / big screen) ===== */
+#live{min-height:100dvh;background:radial-gradient(120% 100% at 50% -10%,var(--maroon2) 0%,var(--maroon) 55%,#2A0710 100%);color:#fff;padding:28px 18px 56px}
+.live-wrap{max-width:1080px;margin:0 auto}
+.live-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+.live-logo{width:52px;height:52px;border-radius:14px;border:2px solid var(--gold);object-fit:cover;background:var(--paper);flex:none}
+.live-top h1{font-size:clamp(22px,3.6vw,34px);color:#fff;line-height:1.1}
+.live-top h1 small{display:block;font:700 12px var(--body);letter-spacing:.12em;text-transform:uppercase;opacity:.7;margin-top:4px}
+.live-dot{margin-left:auto;display:flex;align-items:center;gap:7px;font:800 12px var(--body);letter-spacing:.1em;text-transform:uppercase;background:rgba(255,255,255,.12);padding:7px 14px;border-radius:99px}
+.live-dot i{width:8px;height:8px;border-radius:50%;background:#4ADE80;box-shadow:0 0 0 rgba(74,222,128,.6);animation:liveDot 1.6s ease-in-out infinite}
+@keyframes liveDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}
+.live-stage{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:26px;padding:clamp(16px,3vw,32px);backdrop-filter:blur(8px)}
+.live-stage .swaras{height:min(48vh,380px);gap:clamp(6px,1.6vw,18px)}
+.live-stage .sw{position:relative}
+.live-stage .sw .pts{font-size:clamp(18px,3.2vw,32px);color:#fff}
+.live-stage .sw .sy{font-size:clamp(11px,1.7vw,16px);color:#fff}
+.live-stage .sw .hn{font-size:clamp(10px,1.4vw,14px);opacity:.8;color:#fff;white-space:normal}
+.live-stage .sw.lead .col{box-shadow:0 0 0 3px var(--gold),0 0 30px rgba(230,180,90,.5)}
+.live-stage .sw .crown{font-size:clamp(16px,2.6vw,24px);line-height:1;margin-bottom:2px}
+.live-sub{opacity:.72;margin:16px 4px 0;font-size:13.5px}
+.live-feed{margin-top:28px}
+.live-feed h2{color:#fff;font-size:clamp(18px,2.6vw,22px);margin-bottom:12px}
+.live-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.live-card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:14px 16px;animation:liveIn .5s ease}
+@keyframes liveIn{from{opacity:0;transform:translateY(10px)}}
+.live-card h3{color:#fff;font-size:16px;margin-bottom:6px}
+.live-card .win{margin-top:6px}
+.live-card .win li{border-top-color:rgba(255,255,255,.16)}
+.live-card .win .pl{flex:0 0 26px;font-size:16px}
+.live-card .win .n{color:#fff}
+.live-card .win small{color:rgba(255,255,255,.62)}
+@media(max-width:520px){.live-stage .swaras{height:min(40vh,280px)}.live-cards{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -379,9 +411,17 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
   </div>
 </div>
 
-<section id="live" hidden style="min-height:100dvh;background:var(--maroon);color:#fff;padding:24px 16px">
-  <div style="max-width:760px;margin:0 auto"><h1 style="font-size:34px;color:#fff">Pratibha &middot; House Points</h1>
-  <p id="liveSub" style="opacity:.85;margin:6px 0 18px">Loading&hellip;</p><div id="liveList" style="color:var(--ink)"></div><div id="liveLatest" style="color:var(--ink)"></div></div>
+<section id="live" hidden>
+  <div class="live-wrap">
+    <div class="live-top">
+      <img class="live-logo" alt="" src="sidebar-badge.webp">
+      <h1>Pratibha<small>Celebrate the Seven &middot; Live House Points</small></h1>
+      <span class="live-dot"><i></i>Live</span>
+    </div>
+    <div class="live-stage"><div class="swaras" id="liveBars"></div></div>
+    <p id="liveSub" class="live-sub">Loading&hellip;</p>
+    <div id="liveLatest" class="live-feed"></div>
+  </div>
 </section>
 <dialog id="dlg"></dialog>
 <div id="toast" role="status" aria-live="polite" hidden></div>
@@ -1590,11 +1630,24 @@ function startLive(){
   $('#live').hidden = false; document.title = 'Pratibha House Points';
   const go = async () => {
     try {
-      const j = await api('publicHouses', {}, true), top = Math.max(1, ...j.houses.map(h => h.points));
-      $('#liveList').innerHTML = j.houses.map((h, i) => `<div class="houseRow${i === 0 && h.points > 0 ? ' lead' : ''}"><div class="rk">${i + 1}</div>
-        <div class="nm">${esc(h.house)}<div class="bar"><i style="width:${Math.round(h.points / top * 100)}%;background:${hc(h.house)}"></i></div></div><div class="pt">${h.points}</div></div>`).join('');
-      $('#liveLatest').innerHTML = (j.latest || []).length ? '<h2 style="color:#fff;margin:26px 0 10px">Latest results</h2>' + j.latest.map(r => `<div class="item" style="margin-bottom:8px"><h3>${esc(r.event)}</h3><ul class="win">${r.winners.map(w => `<li><span class="pl">${['1st','2nd','3rd'][w.place - 1]}</span><span class="n">${esc(w.name)}${w.house ? `<small>${esc(w.house)}</small>` : ''}</span></li>`).join('')}</ul></div>`).join('') : '';
-      $('#liveSub').textContent = j.declared + ' of ' + j.total + ' events declared · updated ' + new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+      const j = await api('publicHouses', {}, true);
+      const top = Math.max(1, ...j.houses.map(h => h.points));
+      // Same fixed swara order as the in-app dashboard (rather than sorting by rank) so the
+      // bars don't jump around on a public screen every time points change — only the tallest
+      // bar gets a crown, the order itself stays put.
+      const order = Object.keys(SWARA).map(n => j.houses.find(x => x.house === n) || { house:n, points:0 });
+      const leadPts = Math.max(0, ...order.map(x => x.points));
+      $('#liveBars').innerHTML = order.map(x => {
+        const lead = x.points > 0 && x.points === leadPts;
+        return `<div class="sw${lead ? ' lead' : ''}">${lead ? '<div class="crown">\u{1F451}</div>' : ''}<div class="pts">${x.points}</div>
+          <div class="col" style="height:${Math.max(4, Math.round(x.points / top * 100))}%;background:${hc(x.house)}"></div>
+          <div class="sy">${SWARA[x.house][0]}</div><div class="hn">${esc(x.house)}</div></div>`;
+      }).join('');
+      const medal = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+      $('#liveLatest').innerHTML = (j.latest || []).length
+        ? '<h2>Latest results</h2><div class="live-cards">' + j.latest.map(r => `<div class="live-card"><h3>${esc(r.event)}</h3><ul class="win">${r.winners.map(w => `<li><span class="pl">${medal[w.place - 1] || w.place}</span><span class="n">${esc(w.name)}${w.house ? `<small>${esc(w.house)}</small>` : ''}</span></li>`).join('')}</ul></div>`).join('') + '</div>'
+        : '';
+      $('#liveSub').textContent = j.declared + ' of ' + j.total + ' events declared \u00b7 updated ' + new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
     } catch(e){}
   };
   go(); setInterval(() => { if (!document.hidden) go(); }, 15000);
