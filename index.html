@@ -684,7 +684,7 @@ function endSession(msg){
 }
 async function logout(){ try{ await api('logout'); }catch(e){} endSession(); }
 
-function paintWho(){ $('#who').innerHTML = '<b style="font-size:14px">' + esc(S.me.name || '') + '</b><br>' + esc(S.me.role === 'viewer' ? 'Certificate committee' : cap(S.me.role || '')); }
+function paintWho(){ $('#who').innerHTML = '<b style="font-size:14px">' + esc(S.me.name || '') + '</b><br>' + esc(S.me.role === 'viewer' ? 'Certificate committee' : S.me.role === 'master' ? 'Master Judge' : cap(S.me.role || '')); }
 function showApp(){
   $('#login').hidden = true; $('#app').hidden = false;
   paintWho(); buildTabs(); paintProgress();
@@ -741,14 +741,15 @@ function tabsFor(){
   // Judges get their own marking screen as the tab they land on first, same as before — the
   // dashboard (house-points scoreboard) is now just added alongside it for every role instead
   // of being hidden from judges.
-  if (role() === 'judge') t.push(['score', 'Judge marks']);
+  if (role() === 'judge' || role() === 'master') t.push(['score', 'Judge marks']);
   t.push(['dash', 'Dashboard']);
-  if (role() === 'admin') t.push(['enter', 'All events']);
+  if (role() === 'admin' || role() === 'master') t.push(['enter', 'All events']);
   t.push(['board', 'Results']);
-  if (role() === 'admin' || role() === 'viewer') t.push(['certs', 'Certificates']);
+  if (role() === 'admin' || role() === 'viewer' || role() === 'master') t.push(['certs', 'Certificates']);
   t.push(['house', 'House points']);
-  if (role() === 'admin') t.push(['roster', 'Roster']);
-  if (role() === 'admin'){ t.push(['users', 'Accounts']); t.push(['manage', 'Manage events']); t.push(['log', 'Activity']); }
+  if (role() === 'admin' || role() === 'master') t.push(['roster', 'Roster']);
+  if (role() === 'admin' || role() === 'master'){ t.push(['users', 'Accounts']); t.push(['manage', 'Manage events']); }
+  if (role() === 'admin') t.push(['log', 'Activity']);
   return t;
 }
 const ICONS = {
@@ -803,7 +804,7 @@ async function setTab(k){
       <div id="list" class="list"></div>`;
     wireOneStudent();
   } else if (k === 'board'){
-    const canX = role() === 'admin' || role() === 'viewer';
+    const canX = role() === 'admin' || role() === 'viewer' || role() === 'master';
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search declared results" oninput="S.q=this.value;paint()">
       ${canX ? '<button class="btn gold" onclick="exportXlsx()">Download Excel</button>' : ''}</div><div id="list" class="list"></div><p class="waiting" id="waiting"></p>`;
   } else if (k === 'certs'){
@@ -945,8 +946,8 @@ function paint(){
   }
   else if (S.tab === 'users'){
     L.innerHTML = S.users.length ? S.users.map(u => `<div class="item"><div class="row"><h3>${esc(u.name)}</h3>
-      <span class="pill ${u.active ? 'done' : 'off'}">${u.active ? esc(cap(u.role)) : 'Disabled'}</span></div>
-      <div class="meta">${esc(u.email)}${(u.role === 'judge') ? ', ' + (u.events === 'ALL' ? 'all events' : plural(u.events ? u.events.split(',').length : 0, 'event')) : ''}</div>
+      <span class="pill ${u.active ? 'done' : 'off'}">${u.active ? esc(u.role === 'master' ? 'Master Judge' : cap(u.role)) : 'Disabled'}</span></div>
+      <div class="meta">${esc(u.email)}${(u.role === 'judge' || u.role === 'master') ? ', ' + (u.events === 'ALL' ? 'all events' : plural(u.events ? u.events.split(',').length : 0, 'event')) : ''}</div>
       <div class="cardacts"><div class="cardacts-row"><button class="btn ghost small" onclick="openUser('${esc(u.email)}')">Edit</button>
       ${u.email === S.me.email ? '' : `<button class="btn ghost small" onclick="delUser('${esc(u.email)}')">Delete</button>`}</div></div></div>`).join('')
       : '<div class="empty">No accounts yet.</div>';
@@ -1256,7 +1257,7 @@ function renderJudging(j){
     return `<tr class="${cls}"><td class="who">${whoCell(r)}</td>
       ${cells}<td><b>${r.avg === null ? '—' : r.avg}</b></td><td>${r.rank ?? '—'}</td></tr>`;
   }).join('');
-  const judgeHeads = j.judges.map(jg => `<th>${esc(jg.name)}${jg.locked ? (role() === 'admin' ? `<br><button type="button" class="btn ghost small" onclick="unlockJudge('${ev.id}','${esc(jg.email)}')">Unlock</button>` : '') : ' <small>(entering)</small>'}</th>`).join('');
+  const judgeHeads = j.judges.map(jg => `<th>${esc(jg.name)}${jg.locked ? ((role() === 'admin' || role() === 'master') ? `<br><button type="button" class="btn ghost small" onclick="unlockJudge('${ev.id}','${esc(jg.email)}')">Unlock</button>` : '') : ' <small>(entering)</small>'}</th>`).join('');
   const body = j.entries.length ? `<div style="overflow-x:auto"><table class="scoreTbl"><thead><tr><th>Participant</th>${judgeHeads}<th>Average</th><th>Rank</th></tr></thead><tbody>${rows}</tbody></table></div>`
     : '<div class="empty">No participants scored yet.</div>';
   const noJudges = !j.judges.length ? '<p class="err">No judges are assigned to this event yet — add a judge account under Accounts.</p>' : '';
@@ -1282,7 +1283,10 @@ async function unlockJudge(eventId, judge){
 async function openScoring(id){
   openDlg(`<h2>Loading…</h2><div class="sk-l w60"></div><div class="sk-l w40"></div>`);
   let j;
-  try { j = await api('judging', { eventId:id }); } catch(e){ closeDlg(); return toast(e.message, true); }
+  // as:'judge' tells the backend to show a master judge their own marking screen here, same as
+  // a plain judge sees — as opposed to the full oversight table admins/master judges get from
+  // openJudging (the "All events" screen).
+  try { j = await api('judging', { eventId:id, as:'judge' }); } catch(e){ closeDlg(); return toast(e.message, true); }
   renderScoring(j);
 }
 function renderScoring(j, draft){
@@ -1535,7 +1539,9 @@ function openUser(email){
   <form id="uf">
   ${u ? '' : '<label>Email <input name="email" type="email" inputmode="email" placeholder="name@example.com" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" required></label>'}
   <label>Full name <input name="name" value="${esc(u ? u.name : '')}" required></label>
-  <label>Role <select name="role" id="ur"><option value="judge">Judge (enters marks only)</option><option value="viewer">Certificate committee (view only)</option><option value="admin">Admin (full access)</option></select></label>
+  <label>Role <select name="role" id="ur">${(!u && role() === 'master')
+    ? '<option value="judge">Judge (enters marks only)</option>'
+    : '<option value="judge">Judge (enters marks only)</option><option value="viewer">Certificate committee (view only)</option><option value="master">Master Judge (admin access, no accounts/activity)</option><option value="admin">Admin (full access)</option>'}</select></label>
   <label>${u ? 'New password (leave empty to keep)' : 'Password'}
     <span class="inline"><input name="password" id="upw" autocomplete="new-password" ${u ? '' : 'required'} minlength="6"><button type="button" class="btn ghost small" onclick="$('#upw').value=genPw()">Generate</button></span></label>
   ${u ? `<label style="display:flex;gap:10px;align-items:center;font-weight:500"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> Account active</label>` : ''}
@@ -1546,7 +1552,7 @@ function openUser(email){
     </div></div>
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="sb">${u ? 'Save changes' : 'Create account'}</button></div></form>`);
   const f = $('#uf'); f.role.value = u ? u.role : 'judge';
-  const sync = () => { $('#evbox').hidden = f.role.value !== 'judge'; };
+  const sync = () => { $('#evbox').hidden = f.role.value !== 'judge' && f.role.value !== 'master'; };
   f.role.addEventListener('change', sync); sync();
   $('#all').addEventListener('change', e => document.querySelectorAll('.ev').forEach(c => { c.disabled = e.target.checked; }));
   f.addEventListener('submit', async ev => {
