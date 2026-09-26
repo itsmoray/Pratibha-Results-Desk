@@ -610,6 +610,9 @@ function dlgLift(){ dlg.append($('#topbar'), $('#loadPill'), $('#toast')); }
 function dlgDrop(){ document.body.append($('#topbar'), $('#loadPill'), $('#toast')); }
 dlg.addEventListener('close', () => { dlg.style.maxWidth = ''; dlgDrop(); });
 function openDlg(html){
+  dlgDrop();   // if a previous openDlg() in this same dialog (e.g. a "Loading…" placeholder) had already
+               // lifted #topbar/#loadPill/#toast in, get them back to <body> first so the innerHTML
+               // replacement below doesn't delete them from the document.
   dlg.innerHTML = '<button type="button" class="x" onclick="closeDlg()" aria-label="Close">×</button>' + html;
   dlgLift();
   if (!dlg.open) dlg.showModal();
