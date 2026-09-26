@@ -489,7 +489,7 @@ paintNet();
 let pending = 0;
 const LOAD_LABELS = {
   addStudent:'Saving student…', bulkAddStudents:'Adding students…', updateStudent:'Saving changes…', deleteStudent:'Removing student…',
-  linkStudent:'Linking chest numbers…', unlinkStudent:'Unlinking…',
+  linkStudent:'Linking chest numbers…', unlinkStudent:'Unlinking…', studentReport:'Loading report…',
   saveMarks:'Saving marks…', lockSubmission:'Submitting marks…', unlockSubmission:'Unlocking…', declareFromMarks:'Declaring result…',
   saveResult:'Saving result…', addEvent:'Adding event…', addEvents:'Adding events…', updateEvent:'Saving event…', deleteEvent:'Removing event…',
   setCriteria:'Saving criteria…', importOfficialEvents:'Importing events…', changePassword:'Updating password…',
@@ -888,6 +888,7 @@ function paint(){
       ${s.stage ? `<span class="cat ${stageCls(s.stage)}" style="margin-top:8px;display:inline-block">${esc(s.stage)}</span>` : ''}
       ${s.linkedTo ? `<div class="note" style="margin-top:8px">Points combine into chest #${esc(s.linkedTo)}</div>` : ''}
       <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openStudentEdit('${esc(s.chest)}')">Edit</button>
+      <button class="btn ghost small" onclick="openStudentReport('${esc(s.chest)}')">Report</button>
       ${s.linkedTo ? `<button class="btn ghost small" onclick="unlinkStudent('${esc(s.chest)}')">Unlink</button>`
                    : `<button class="btn ghost small" onclick="openLinkStudent('${esc(s.chest)}')">Same student, other chest no.</button>`}
       <button class="btn ghost small" onclick="delStudent('${esc(s.chest)}')">Delete</button></div></div>`).join('')
@@ -932,6 +933,7 @@ function paint(){
       <span class="pill ${isDone(e.id) ? 'done' : 'wait'}">${isDone(e.id) ? 'Declared' : 'Pending'}</span></div>
       <div class="meta">${esc(e.id)}${e.category ? ', ' + esc(e.category) : ''}${e.venue ? ', ' + esc(e.venue) : ''}</div><div class="tagRow"><span class="tag">${e.judgesNeeded ? e.judgeCount + ' of ' + plural(e.judgesNeeded, 'judge') : plural(e.judgeCount, 'judge')}</span><span class="tag">${e.criteriaCount ? plural(e.criteriaCount, 'criterion') : 'One mark out of ' + e.maxMark}</span></div>
       <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openEditor('${e.id}')">${isDone(e.id) ? 'View / edit result' : 'Enter result'}</button><button class="btn ghost small" onclick="openEventEdit('${e.id}')">Edit</button><button class="btn ghost small" onclick="openCriteria('${e.id}')">Criteria</button>
+      <button class="btn ghost small" onclick="printEventReport('${e.id}')">Report</button>
       <button class="btn ghost small" onclick="delEvent('${e.id}')">Delete</button></div></div>`).join('')
       : '<div class="empty">No events yet. Add your event list above.</div>';
   }
@@ -1148,6 +1150,46 @@ async function unlinkStudent(chest){
   const s = studentBy(chest);
   if (!await confirmBox('Unlink chest number?', 'Chest #' + chest + (s && s.linkedTo ? ' will stop combining its points into chest #' + s.linkedTo + '.' : ' will go back to being counted on its own.'), 'Unlink')) return;
   try { await api('unlinkStudent', { chest }); toast('Unlinked'); await refresh(); } catch(e){ toast(e.message, true); }
+}
+
+/* One student's achievements: every event entered, mark average, placing and points, for
+   documenting a student's results (e.g. for a portfolio or a scholarship application). */
+async function openStudentReport(chest){
+  openDlg(`<h2>Loading…</h2><div class="sk-l w60"></div><div class="sk-l w40"></div>`);
+  let j;
+  try { j = await api('studentReport', { chest }); } catch(e){ closeDlg(); return toast(e.message, true); }
+  S.lastReport = j;
+  const s = j.student;
+  const rows = j.rows.map(r => `<tr><td>${esc(r.event)}<br><small>${esc(r.category)}</small></td><td>${r.markAvg === '' ? '—' : r.markAvg}</td><td>${r.place || (r.declared ? '—' : 'Pending')}</td><td><b>${r.points}</b></td></tr>`).join('');
+  openDlg(`<h2>${esc(s.name)}</h2><p class="sub">#${esc(s.chest)} · ${esc([s.cls, s.house].filter(Boolean).join(', '))}</p>
+  ${j.rows.length ? `<div style="overflow-x:auto"><table class="scoreTbl"><thead><tr><th>Event</th><th>Mark avg.</th><th>Placing</th><th>Points</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="meta" style="margin-top:10px">Total points: <b>${j.totalPoints}</b></p>` : '<div class="empty">Not entered in any event yet.</div>'}
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Close</button>
+  ${j.rows.length ? `<button type="button" class="btn ghost" onclick="printStudentReport()">Print / PDF</button>
+  <button type="button" class="btn gold" onclick="exportStudentReport()">Download Excel</button>` : ''}</div>`);
+}
+function printStudentReport(){
+  const j = S.lastReport; if (!j) return;
+  const s = j.student;
+  const w = window.open('', '_blank'); if (!w) return toast('Allow pop-ups to print the report', true);
+  w.document.write(`<!doctype html><title>${esc(s.name)} — achievements</title>
+  <style>body{font:14px system-ui,sans-serif;margin:24px;color:#000}table{border-collapse:collapse;width:100%;margin-top:12px}th,td{border:1px solid #888;padding:6px 8px;text-align:left;vertical-align:top}small{color:#555}</style>
+  <h2 style="margin:0">Pratibha 2026-27 · ${esc(s.name)}</h2>
+  <p>Chest #${esc(s.chest)} · ${esc([s.cls, s.house].filter(Boolean).join(', '))}<br>printed ${esc(new Date().toLocaleString())}</p>
+  <table><tr><th>Event</th><th>Category</th><th>Mark avg.</th><th>Placing</th><th>Points</th></tr>
+  ${j.rows.map(r => `<tr><td>${esc(r.event)}</td><td>${esc(r.category)}</td><td>${r.markAvg === '' ? '—' : r.markAvg}</td><td>${r.place || (r.declared ? '—' : 'Pending')}</td><td>${r.points}</td></tr>`).join('')}</table>
+  <p style="margin-top:16px"><b>Total points: ${j.totalPoints}</b></p>
+  <script>onload = () => print()<\/script>`);
+  w.document.close();
+}
+async function exportStudentReport(){
+  const j = S.lastReport; if (!j) return;
+  try { await loadXlsx(); } catch(e){ return toast(e.message, true); }
+  const s = j.student;
+  const rows = j.rows.map(r => ({ 'Event':r.event, 'Category':r.category, 'Mark avg.':r.markAvg, 'Placing':r.place || (r.declared ? '' : 'Pending'), 'Points':r.points }));
+  rows.push({ 'Event':'', 'Category':'', 'Mark avg.':'', 'Placing':'Total', 'Points':j.totalPoints });
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Achievements');
+  XLSX.writeFile(wb, (s.name || 'student').replace(/[^\w]+/g, '_') + '_achievements.xlsx');
 }
 const HOUSES_UI = ['Shadjam','Rishabham','Gandharam','Madhyamam','Panchamam','Dhaivatam','Nishadam'];
 const STAGES_UI = ['On-stage','Off-stage','Both'];
@@ -1617,6 +1659,35 @@ async function cycleCert(id, n){
 }
 
 /* ====== SCORE SHEET (print / save as PDF) ====== */
+/* Full report for one event: entries, judges' marks (if any) and the declared result together —
+   available for every event from Manage events, not just while judging is open. */
+async function printEventReport(id){
+  const e = S.events.find(x => x.id === id); if (!e) return;
+  let j;
+  try { j = await api('judging', { eventId: id }); } catch(err){ return toast(err.message, true); }
+  const r = S.results[id] || {};
+  const cr = j.criteria;
+  const cell = (row, jg) => {
+    const t = row.perJudge[jg.email]; if (t === null || t === undefined) return '—';
+    const by = (row.perCrit || {})[jg.email] || {};
+    return (cr.length ? cr.map(c => by[c.id] ?? '–').join(' + ') + ' = ' : '') + '<b>' + t + '</b>';
+  };
+  const resultRows = [['1st', 'p1', 'c1'], ['2nd', 'p2', 'c2'], ['3rd', 'p3', 'c3'], ['Runner-up', 'p4', 'c4']]
+    .filter(x => r[x[1]]).map(x => `<tr><td>${x[0]}</td><td>${esc(r[x[1]])}</td><td>${esc(r[x[2]] || '')}</td></tr>`).join('');
+  const w = window.open('', '_blank'); if (!w) return toast('Allow pop-ups to print the report', true);
+  w.document.write(`<!doctype html><title>${esc(e.name)} report</title>
+  <style>body{font:14px system-ui,sans-serif;margin:24px;color:#000}table{border-collapse:collapse;width:100%;margin-top:12px}th,td{border:1px solid #888;padding:6px 8px;text-align:left;vertical-align:top}small{color:#555}h3{margin:24px 0 0}</style>
+  <h2 style="margin:0">Pratibha 2026-27 · ${esc(e.name)}</h2>
+  <p>${esc([e.category, e.venue].filter(Boolean).join(', '))}<br>printed ${esc(new Date().toLocaleString())}</p>
+  <h3>Result</h3>${resultRows ? `<table><tr><th>Place</th><th>Winner</th><th>Class</th></tr>${resultRows}</table>` : '<p><small>Not declared yet.</small></p>'}
+  ${r.notes ? `<p><small>${esc(r.notes)}</small></p>` : ''}
+  <h3>Entries and marks</h3>${j.entries.length ? `<table><tr><th>Rank</th><th>Participant</th>${j.judges.map(g => `<th>${esc(g.name)}</th>`).join('')}<th>Average</th></tr>
+  ${j.entries.map(row => `<tr><td>${row.rank ?? '—'}</td><td>${esc(row.name)}<br><small>#${esc(row.chest)} · ${esc([row.cls, row.house].filter(Boolean).join(', '))}</small></td>${j.judges.map(g => `<td>${cell(row, g)}</td>`).join('')}<td><b>${row.avg ?? '—'}</b></td></tr>`).join('')}</table>`
+  : '<p><small>No participants entered.</small></p>'}
+  <script>onload = () => print()<\/script>`);
+  w.document.close();
+}
+
 function printSheet(){
   const j = S.lastJ; if (!j) return;
   const cr = j.criteria, ev = j.event;
