@@ -561,9 +561,17 @@ function wireLookup(inputEl, lineEl){
   inputEl.addEventListener('input', () => { lineEl.innerHTML = lookupLine(inputEl.value); });
 }
 const dlg = $('#dlg');
-dlg.addEventListener('close', () => { dlg.style.maxWidth = ''; });
+// A native <dialog> shown with showModal() renders in the browser's "top layer", above every
+// normal element no matter its z-index. That was hiding the global topbar / loading-pill /
+// toast behind the dialog's blurred backdrop whenever a dialog (e.g. the judging screen) was
+// open. Moving those same elements inside the dialog while it's open — and back out to <body>
+// once it closes — puts them in that same top layer so they stay visible above the backdrop.
+function dlgLift(){ dlg.append($('#topbar'), $('#loadPill'), $('#toast')); }
+function dlgDrop(){ document.body.append($('#topbar'), $('#loadPill'), $('#toast')); }
+dlg.addEventListener('close', () => { dlg.style.maxWidth = ''; dlgDrop(); });
 function openDlg(html){
   dlg.innerHTML = '<button type="button" class="x" onclick="closeDlg()" aria-label="Close">×</button>' + html;
+  dlgLift();
   if (!dlg.open) dlg.showModal();
   const f = dlg.querySelector('input:not([hidden]),select,textarea');
   if (f && !matchMedia('(pointer:coarse)').matches) f.focus();
@@ -664,8 +672,11 @@ function paintProgress(){
 /* ====== TABS ====== */
 function tabsFor(){
   const t = [];
-  if (role() !== 'judge') t.push(['dash', 'Dashboard']);
+  // Judges get their own marking screen as the tab they land on first, same as before — the
+  // dashboard (house-points scoreboard) is now just added alongside it for every role instead
+  // of being hidden from judges.
   if (role() === 'judge') t.push(['score', 'Judge marks']);
+  t.push(['dash', 'Dashboard']);
   if (role() === 'admin') t.push(['enter', 'All events']);
   t.push(['board', 'Results']);
   if (role() === 'admin' || role() === 'viewer') t.push(['certs', 'Certificates']);
@@ -1207,17 +1218,37 @@ function renderScoring(j, draft){
   }
   const addBox = $('#addChest');
   if (addBox){
-    wireLookup(addBox, $('#addLine'));
+    const addLine = $('#addLine');
+    wireLookup(addBox, addLine);
     let addBusy = false;
     addBox.addEventListener('keydown', async e => {
       if (e.key !== 'Enter' || addBusy) return; e.preventDefault();
       const chests = addBox.value.split(/[\s,;]+/).filter(Boolean); if (!chests.length) return;
-      addBusy = true; addBox.disabled = true;
+      // Lock the field and clear it right away — before the network call — so pressing Enter
+      // again (or a barcode scanner firing a second scan) can't queue up a repeat add while the
+      // first one is still in flight, and so there's an immediate sign the entry was received.
+      addBusy = true; addBox.disabled = true; addBox.value = '';
+      addLine.innerHTML = `<div class="lookup">Adding ${plural(chests.length, 'student')}…</div>`;
       try {
         const a = await api('addEntries', { eventId: ev.id, chests });
         if (a.missing.length) toast('Not on the roster: ' + a.missing.join(', '), true); else if (a.warn) toast(a.warn, true); else toast(plural(a.added, 'student') + ' added');
-        const d = draftNow(); renderScoring(await api('judging', { eventId: ev.id }), d); const b2 = $('#addChest'); if (b2) b2.focus();
-      } catch(err){ toast(err.message, true); addBusy = false; addBox.disabled = false; }
+        // Drop the new rows straight into the list already on screen instead of making a second
+        // round trip to re-fetch the whole event — this is what was making adding a student feel
+        // slow, since every add used to wait on two server calls back to back instead of one.
+        const have = new Set(j.entries.map(r => r.chest));
+        chests.forEach(c => {
+          if (have.has(c) || a.missing.indexOf(c) > -1) return;
+          const s = studentBy(c);
+          j.entries.push({ chest:c, name: s ? s.name : ('#' + c), cls: s ? s.cls : '', house: s ? s.house : '',
+            missing: !s, perJudge: { [S.me.email]: null }, mineCrit: {}, avg: null, rank: null });
+          have.add(c);
+        });
+        j.entries.sort((a2, b2) => String(a2.chest).localeCompare(String(b2.chest), undefined, { numeric:true }));
+        const d = draftNow(); renderScoring(j, d); const b2 = $('#addChest'); if (b2) b2.focus();
+      } catch(err){
+        toast(err.message, true); addBusy = false; addBox.disabled = false; addLine.innerHTML = '';
+        addBox.value = chests.join(' '); addBox.focus();
+      }
     });
   }
   const sb = $('#saveBtn');
