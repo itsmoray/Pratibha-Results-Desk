@@ -489,6 +489,7 @@ paintNet();
 let pending = 0;
 const LOAD_LABELS = {
   addStudent:'Saving student…', bulkAddStudents:'Adding students…', updateStudent:'Saving changes…', deleteStudent:'Removing student…',
+  linkStudent:'Linking chest numbers…', unlinkStudent:'Unlinking…',
   saveMarks:'Saving marks…', lockSubmission:'Submitting marks…', unlockSubmission:'Unlocking…', declareFromMarks:'Declaring result…',
   saveResult:'Saving result…', addEvent:'Adding event…', addEvents:'Adding events…', updateEvent:'Saving event…', deleteEvent:'Removing event…',
   setCriteria:'Saving criteria…', importOfficialEvents:'Importing events…', changePassword:'Updating password…',
@@ -568,7 +569,8 @@ const ACT = { login:'Signed in', loginFailed:'Failed sign-in', logout:'Signed ou
   saveResult:'Saved result', createUser:'Created account', updateUser:'Updated account', deleteUser:'Deleted account',
   addEvents:'Added events', updateEvent:'Edited event', deleteEvent:'Deleted event',
   setCriteria:'Set judging criteria', addStudents:'Added roster students', updateStudent:'Edited student',
-  deleteStudent:'Deleted student', addEntry:'Added participant', removeEntry:'Removed participant',
+  deleteStudent:'Deleted student', linkStudent:'Linked chest numbers', unlinkStudent:'Unlinked chest numbers',
+  addEntry:'Added participant', removeEntry:'Removed participant',
   saveMarks:'Saved marks', lockSubmission:'Submitted marks', unlockSubmission:'Unlocked marks',
   declareFromMarks:'Declared result from marks', certStatus:'Certificate status', importOfficialEvents:'Loaded official event list',
   bulkSetMaxMark:'Set max mark for all events' };
@@ -884,7 +886,10 @@ function paint(){
       <span class="pill wait">#${esc(s.chest)}</span></div>
       <div class="meta">${esc([s.cls, s.house].filter(Boolean).join(', '))}</div>
       ${s.stage ? `<span class="cat ${stageCls(s.stage)}" style="margin-top:8px;display:inline-block">${esc(s.stage)}</span>` : ''}
+      ${s.linkedTo ? `<div class="note" style="margin-top:8px">Points combine into chest #${esc(s.linkedTo)}</div>` : ''}
       <div class="actions" style="margin-top:10px"><button class="btn ghost small" onclick="openStudentEdit('${esc(s.chest)}')">Edit</button>
+      ${s.linkedTo ? `<button class="btn ghost small" onclick="unlinkStudent('${esc(s.chest)}')">Unlink</button>`
+                   : `<button class="btn ghost small" onclick="openLinkStudent('${esc(s.chest)}')">Same student, other chest no.</button>`}
       <button class="btn ghost small" onclick="delStudent('${esc(s.chest)}')">Delete</button></div></div>`).join('')
       : '<div class="empty">No students on the roster yet. Add them above.</div>';
   }
@@ -1123,6 +1128,26 @@ async function delStudent(chest){
   const s = studentBy(chest);
   if (!await confirmBox('Delete student?', (s ? s.name : chest) + ' will be removed from the roster.', 'Delete student')) return;
   try { await api('deleteStudent', { chest }); toast('Student deleted'); await refresh(); } catch(e){ toast(e.message, true); }
+}
+// Same person, different chest number in another event: link the two so their points add up as one
+// student in the Individual Championship, instead of being split across two roster rows.
+function openLinkStudent(chest){
+  const s = studentBy(chest);
+  openDlg(`<h2>Same student, other chest no.</h2><p class="sub">Chest #${esc(chest)} — ${esc(s ? s.name : '')}</p>
+  <div class="err" id="fe" hidden></div>
+  <form id="lf"><label>Combine points into chest no. <input name="to" required autocomplete="off" placeholder="e.g. 102"></label>
+  <p class="meta">Both chest numbers keep working on their own events. Only the points used for the Individual Championship add up as one student, under the chest number entered here.</p>
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Cancel</button><button class="btn gold" id="lb">Link</button></div></form>`);
+  $('#lf').addEventListener('submit', async ev => {
+    ev.preventDefault(); const f = ev.target, b = $('#lb'), er = $('#fe'); er.hidden = true; b.disabled = true;
+    try { await api('linkStudent', { from: chest, to: f.to.value.trim() }); closeDlg(); celebrate('Chest numbers linked'); await refresh(); }
+    catch(err){ er.textContent = err.message; er.hidden = false; b.disabled = false; }
+  });
+}
+async function unlinkStudent(chest){
+  const s = studentBy(chest);
+  if (!await confirmBox('Unlink chest number?', 'Chest #' + chest + (s && s.linkedTo ? ' will stop combining its points into chest #' + s.linkedTo + '.' : ' will go back to being counted on its own.'), 'Unlink')) return;
+  try { await api('unlinkStudent', { chest }); toast('Unlinked'); await refresh(); } catch(e){ toast(e.message, true); }
 }
 const HOUSES_UI = ['Shadjam','Rishabham','Gandharam','Madhyamam','Panchamam','Dhaivatam','Nishadam'];
 const STAGES_UI = ['On-stage','Off-stage','Both'];
