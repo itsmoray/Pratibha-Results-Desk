@@ -565,7 +565,7 @@ const LOAD_LABELS = {
   linkStudent:'Linking chest numbers…', unlinkStudent:'Unlinking…', studentReport:'Loading report…',
   saveMarks:'Saving marks…', lockSubmission:'Submitting marks…', unlockSubmission:'Unlocking…', declareFromMarks:'Declaring result…',
   saveResult:'Saving result…', addEvent:'Adding event…', addEvents:'Adding events…', updateEvent:'Saving event…', deleteEvent:'Removing event…',
-  setCriteria:'Saving criteria…', importOfficialEvents:'Importing events…', changePassword:'Updating password…',
+  setCriteria:'Saving criteria…', importOfficialEvents:'Importing events…', importSchedule:'Loading schedule…', changePassword:'Updating password…',
   addUser:'Saving account…', updateUser:'Saving account…', deleteUser:'Removing account…'
 };
 async function api(action, payload = {}, silent){
@@ -656,7 +656,7 @@ const ACT = { login:'Signed in', loginFailed:'Failed sign-in', logout:'Signed ou
   addEntry:'Added participant', removeEntry:'Removed participant',
   saveMarks:'Saved marks', lockSubmission:'Submitted marks', unlockSubmission:'Unlocked marks',
   declareFromMarks:'Declared result from marks', certStatus:'Certificate status', importOfficialEvents:'Loaded official event list',
-  bulkSetMaxMark:'Set max mark for all events' };
+  bulkSetMaxMark:'Set max mark for all events', importSchedule:'Loaded venue & time schedule' };
 const ACT_BAD = ['loginFailed', 'deleteUser', 'deleteEvent'];
 const actLabel = a => ACT[a] || a;
 function fmtLog(iso){
@@ -933,6 +933,8 @@ async function setTab(k){
       <div class="actions" style="margin-top:4px"><button class="btn gold" id="addOneBtn">Add event</button></div></form>
       <div class="item" style="margin-bottom:14px"><h3>Official event list</h3><p class="meta" style="margin:4px 0 12px">Adds the 49 events from the guidelines (PAF 01 to 49) that are missing.</p>
       <button type="button" class="btn ghost" onclick="importOfficial()">Load official event list</button></div>
+      <div class="item" style="margin-bottom:14px"><h3>Venue &amp; time</h3><p class="meta" style="margin:4px 0 12px">Fills in venue and start time for the 44 events the fest's schedule sheets cover. Wind Instrument (Eastern), Essay Writing (Sanskrit), Geetha Chanting, Short Film and Photography aren't scheduled yet, so they're left as is — set those by hand once you have a time for them.</p>
+      <button type="button" class="btn ghost" onclick="importSchedule()">Load venue &amp; time schedule</button></div>
       <details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Set max mark for all events</summary>
       <p class="meta">Sets "Max mark per judge" on every event at once. Events with their own Criteria still total to their criteria's marks, not this number — edit those separately under Criteria.</p>
       <div class="actions" style="justify-content:flex-start"><input id="bulkMax" type="number" min="1" max="1000" value="100" style="max-width:110px"><button type="button" class="btn ghost" id="bulkMaxBtn" onclick="bulkSetMaxMark()">Apply to all events</button></div></details>
@@ -1815,6 +1817,11 @@ async function openCriteria(id){
 async function importOfficial(){
   if (!await confirmBox('Load the official event list?', 'Adds the events from the guidelines that are missing. Elocution, essays, poems, stories and recitation get one event per language. Old general events like "Elocution" or "Essay Writing" are removed only if they have no results or marks yet. Vocal, dance, debate, elocution, recitation, mono act, mimicry, instrumental music, short film, rangoli, photography, mime, mehendi design, water colouring, story/poetry/essay writing, pencil drawing, fancy dress, collage and clay modelling events get their judging criteria from the fest\u2019s judging-criteria sheets (50 total per event, split evenly across criteria unless the sheet says otherwise, editable).', 'Load events')) return;
   try { const j = await api('importOfficialEvents'); toast(j.added + ' events added, ' + j.removed + ' old removed'); await refresh(); }
+  catch(e){ toast(e.message, true); }
+}
+async function importSchedule(){
+  if (!await confirmBox('Load the venue & time schedule?', 'Sets venue and start time on every existing event the fest\u2019s ON_STAGE_ACTIVITY / OFF_STAGE_ACTIVITY sheets cover, overwriting whatever venue or start time those events currently have. Events not in those sheets yet are left untouched.', 'Load schedule')) return;
+  try { const j = await api('importSchedule'); toast(j.updated + ' events scheduled' + (j.missed && j.missed.length ? ' (' + j.missed.length + ' from the sheets have no matching event yet)' : '')); await refresh(); }
   catch(e){ toast(e.message, true); }
 }
 async function bulkSetMaxMark(){
