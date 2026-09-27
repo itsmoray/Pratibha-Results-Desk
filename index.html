@@ -99,6 +99,8 @@ button.item:hover{border-color:var(--ink)}
 .pill{font-size:12.5px;font-weight:600;padding:3px 9px;border-radius:99px;white-space:nowrap;flex:none}
 .pill.done{background:var(--teal-soft);color:var(--teal)}
 .pill.wait{background:var(--gold-soft);color:#8A5B00}
+.pill.live{background:var(--blue-soft);color:var(--blue)}
+.pill.ready{background:var(--gold);color:var(--ink);font-weight:700}
 .pill.off{background:var(--danger-soft);color:var(--danger)}
 .win{margin:10px 0 0;padding:0;list-style:none;font-size:15px}
 .win li{display:flex;gap:8px;padding:3px 0;border-top:1px solid var(--line)}
@@ -233,7 +235,7 @@ dialog h2{padding-right:40px}
 @media print{.top,.tabs,.controls,#toast,#topbar{display:none!important}body{background:#fff}.item{break-inside:avoid}.list{grid-template-columns:1fr 1fr}}
 
 /* ===== redesign: the seven swaras ===== */
-:root{--ink:#1D1418;--maroon:#6B1226;--maroon2:#3F0A18;--ink2:#8B2A40;--paper:#F5F1EA;--card:#fff;--line:#E8E1D8;--muted:#726670;--gold:#D9A441;--gold-soft:#FBF0D6;--teal:#0E7A63;--teal-soft:#DDF3EB;--danger:#C0352B;--danger-soft:#FCE9E6;--head:'Fraunces',Georgia,serif;--body:'Manrope',system-ui,sans-serif;--r:16px;--sh:0 1px 2px rgba(29,20,24,.05),0 8px 24px rgba(29,20,24,.06)}
+:root{--ink:#1D1418;--maroon:#6B1226;--maroon2:#3F0A18;--ink2:#8B2A40;--paper:#F5F1EA;--card:#fff;--line:#E8E1D8;--muted:#726670;--gold:#D9A441;--gold-soft:#FBF0D6;--teal:#0E7A63;--teal-soft:#DDF3EB;--blue:#2F6FB0;--blue-soft:#E1EDF8;--danger:#C0352B;--danger-soft:#FCE9E6;--head:'Fraunces',Georgia,serif;--body:'Manrope',system-ui,sans-serif;--r:16px;--sh:0 1px 2px rgba(29,20,24,.05),0 8px 24px rgba(29,20,24,.06)}
 body{font:15px/1.5 var(--body);background:var(--paper)}
 h1,h2,h3{font-family:var(--head);letter-spacing:-.01em}
 .login{background:linear-gradient(180deg,#EFE2CB,var(--paper))}
@@ -586,6 +588,24 @@ function fmtLog(iso){
 }
 const isDone = id => !!(S.results[id] && S.results[id].p1);
 const role = () => S.me ? S.me.role : '';
+
+/* Live event-status pill: reflects current judging activity rather than a flat Pending/Declared.
+   `code` is e.status (admin/master's "All events" view) or e.myStatus (a judge's own "Judge
+   marks" view, jv=true) from data_(). Lower STATUS_RANK sorts first so events ready to declare
+   (or being actively judged) surface above ones nobody has touched yet. */
+const STATUS_RANK = { ready:0, submitted:1, judging:2, pending:3, unassigned:4, declared:5 };
+function statusPill(e, jv){
+  const code = jv ? e.myStatus : e.status;
+  const left = e.judgeCount - e.judgeDone;
+  switch (code){
+    case 'declared':   return { cls:'done', label:'Declared', rank:STATUS_RANK.declared };
+    case 'ready':       return { cls:'ready', label:'Judgment done — awaiting declaration', rank:STATUS_RANK.ready };
+    case 'submitted':   return { cls:'live', label:'Submitted — waiting for ' + plural(left, 'other judge'), rank:STATUS_RANK.submitted };
+    case 'judging':     return { cls:'live', label:e.judgeDone ? 'Judging — ' + e.judgeDone + ' of ' + e.judgeCount + ' done' : 'Judging', rank:STATUS_RANK.judging };
+    case 'pending':     return { cls:'wait', label:'Judgment pending', rank:STATUS_RANK.pending };
+    default:            return { cls:'wait', label:'Pending', rank:STATUS_RANK.unassigned };
+  }
+}
 const studentBy = chest => S.students.find(s => s.chest === String(chest || '').trim());
 // Update S.students in place from a server response, so the roster repaints instantly without
 // a second, heavier round trip to re-fetch everything.
@@ -883,6 +903,9 @@ function paint(){
       const none = !S.events.some(e => e.canEdit);
       L.innerHTML = `<div class="empty">${none ? 'No events are assigned to you yet. Ask the admin to assign your events.' : 'No events match.'}</div>`; return;
     }
+    // Events ready to declare (or actively being judged) float to the top, so they don't get
+    // lost among ones nobody has touched yet — see statusPill().
+    list.sort((a, b) => statusPill(a).rank - statusPill(b).rank);
     L.innerHTML = list.map(e => evCard(e, e.judged ? `openJudging('${e.id}')` : `openEditor('${e.id}')`)).join('');
   }
   else if (S.tab === 'score'){
@@ -893,6 +916,7 @@ function paint(){
       const none = !S.events.some(e => e.isJudge);
       L.innerHTML = `<div class="empty">${none ? 'No events are assigned to you for judging yet. Ask the admin to assign you.' : 'No events match.'}</div>`; return;
     }
+    list.sort((a, b) => statusPill(a, true).rank - statusPill(b, true).rank);
     L.innerHTML = list.map(e => evCard(e, `openScoring('${e.id}')`, true)).join('');
   }
   else if (S.tab === 'house'){
@@ -954,12 +978,12 @@ function paint(){
   }
   else if (S.tab === 'manage'){
     const list = S.events.filter(match);
-    L.innerHTML = list.length ? list.map(e => `<div class="item"><div class="row"><h3>${esc(e.name)}</h3>
-      <span class="pill ${isDone(e.id) ? 'done' : 'wait'}">${isDone(e.id) ? 'Declared' : 'Pending'}</span></div>
+    L.innerHTML = list.length ? list.map(e => { const st = statusPill(e); return `<div class="item"><div class="row"><h3>${esc(e.name)}</h3>
+      <span class="pill ${st.cls}">${esc(st.label)}</span></div>
       <div class="meta">${esc(e.id)}${e.category ? ', ' + esc(e.category) : ''}${e.venue ? ', ' + esc(e.venue) : ''}</div><div class="tagRow"><span class="tag">${e.judgesNeeded ? e.judgeCount + ' of ' + plural(e.judgesNeeded, 'judge') : plural(e.judgeCount, 'judge')}</span><span class="tag">${e.criteriaCount ? plural(e.criteriaCount, 'criterion') : 'One mark out of ' + e.maxMark}</span></div>
       <div class="cardacts"><button class="btn ghost small" onclick="openEditor('${e.id}')">${isDone(e.id) ? 'View / edit result' : 'Enter result'}</button><div class="cardacts-row"><button class="btn ghost small" onclick="openEventEdit('${e.id}')">Edit</button><button class="btn ghost small" onclick="openCriteria('${e.id}')">Criteria</button>
       <button class="btn ghost small" onclick="printEventReport('${e.id}')">Report</button>
-      <button class="btn ghost small" onclick="delEvent('${e.id}')">Delete</button></div></div></div>`).join('')
+      <button class="btn ghost small" onclick="delEvent('${e.id}')">Delete</button></div></div></div>`; }).join('')
       : '<div class="empty">No events yet. Add your event list above.</div>';
   }
   else if (S.tab === 'log'){
@@ -984,9 +1008,9 @@ const SWARA = { Shadjam:['Sa','#E5484D'], Rishabham:['Ri','#F08A24'], Gandharam:
 const hc = n => (SWARA[n] || [0, '#C48B22'])[1];
 const catCls = c => /group/i.test(c) ? 'grp' : /^off/i.test(c) ? 'off' : 'on';
 function evCard(e, fn, jv){
-  const r = S.results[e.id], done = !!(r && r.p1);
+  const r = S.results[e.id], done = !!(r && r.p1), st = statusPill(e, jv);
   return `<button class="ecard ${done ? 'is-done' : ''}" onclick="${fn}"><div class="ecard-top"><span class="cat ${catCls(e.category)}">${esc(e.category || 'Event')}</span>
-    <span class="pill ${done ? 'done' : 'wait'}">${done ? 'Declared' : jv ? 'Judging' : 'Pending'}</span></div><h3>${esc(e.name)}</h3>
+    <span class="pill ${st.cls}">${esc(st.label)}</span></div><h3>${esc(e.name)}</h3>
     <div class="ecard-meta">${e.venue ? `<span>${esc(e.venue)}</span>` : ''}${(e.judged || jv) ? `<span>${plural(e.judgeCount, 'judge')}</span>` : ''}<span>${plural(e.entryCount, 'entry')}</span>${e.criteriaCount ? `<span>${plural(e.criteriaCount, 'criterion')}</span>` : jv ? '<span>Overall mark</span>' : ''}</div>
     ${done ? `<div class="ecard-win"><span class="medal">1st</span><b>${esc(r.p1)}</b></div>` : ''}</button>`;
 }
