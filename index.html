@@ -30,7 +30,7 @@ button{cursor:pointer}
 
 /* fields */
 label{display:block;font-weight:600;font-size:14px;margin:0 0 12px}
-input,select,textarea{display:block;width:100%;margin-top:5px;padding:11px 12px;border:1.5px solid var(--line);border-radius:8px;background:#fff;font-weight:400}
+input,select,textarea{display:block;width:100%;margin-top:5px;padding:11px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--card);font-weight:400}
 input:focus,select:focus,textarea:focus{border-color:var(--ink);outline:none;box-shadow:0 0 0 3px rgba(196,139,34,.28)}
 input[type=search]{-webkit-appearance:none;appearance:none}
 select{-webkit-appearance:none;appearance:none;padding-right:36px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%232E1510' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 13px center}
@@ -45,7 +45,7 @@ fieldset input{margin-top:8px}
 .errTxt{color:var(--danger);font-weight:600}
 
 /* buttons */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;text-align:center;line-height:1.25;border:0;border-radius:8px;padding:11px 16px;font-weight:600;background:var(--ink);color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;text-align:center;line-height:1.25;border:0;border-radius:8px;padding:11px 16px;font-weight:600;background:var(--fill);color:#fff}
 .btn:disabled{opacity:.6;cursor:wait}
 .btn.gold{background:var(--gold);color:var(--ink)}
 .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
@@ -85,8 +85,9 @@ main{max-width:960px;margin:0 auto;padding:16px}
 .controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .controls input{margin:0;flex:1;min-width:180px}
 .chips{display:flex;gap:6px}
-.chip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:7px 13px;font-size:14px;font-weight:600}
-.chip[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip{border:1.5px solid var(--line);background:var(--card);border-radius:99px;padding:7px 13px;font-size:14px;font-weight:600}
+.chip[aria-pressed=true]{background:var(--fill);color:#fff;border-color:var(--fill)}
+.tabBadge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:99px;background:var(--gold);color:var(--maroon2);font:800 11px var(--body)}
 
 /* lists */
 .list{display:grid;gap:10px}
@@ -128,6 +129,13 @@ dialog h2{font-size:22px}
 .checks input{width:auto;margin:0}
 .inline{display:flex;gap:8px}
 .inline input{flex:1}
+/* Side-by-side dialog fields (chest+name, house/gender/stage, course/sem/batch, 1st/2nd/3rd
+   points) get cramped on a narrow phone — stack them instead below this width. The password +
+   "Generate" row uses <span class="inline"> on purpose and is left alone: it's only two short
+   controls and reads fine side by side even on a small screen. */
+@media(max-width:480px){
+  div.inline{flex-direction:column;gap:0}
+}
 
 .list.log{grid-template-columns:1fr}
 .lg{padding:10px 14px}
@@ -140,7 +148,7 @@ dialog h2{font-size:22px}
 .creds div:first-child{border-top:0}
 .creds span{display:block;color:var(--muted);font-size:13px;font-weight:600}
 .creds b{display:block;margin-top:2px;font-weight:600;font-size:17px;overflow-wrap:anywhere;user-select:all}
-#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 16px;border-radius:10px;z-index:99;max-width:90%;font-weight:500}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--fill);color:#fff;padding:11px 16px;border-radius:10px;z-index:99;max-width:90%;font-weight:500}
 #toast.bad{background:var(--danger)}
 #netbanner{position:fixed;left:50%;top:10px;transform:translateX(-50%);background:var(--gold-soft);color:var(--ink);border:1px solid var(--gold);padding:7px 14px;border-radius:20px;z-index:101;font-weight:600;font-size:13px;display:flex;align-items:center;gap:7px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 #netbanner i{width:7px;height:7px;border-radius:50%;background:var(--danger);flex:none}
@@ -184,7 +192,7 @@ dialog h2{padding-right:40px}
 @media(prefers-reduced-motion:reduce){.sk-l,.strip.loading i,#topbar,.spin,.btn:disabled::after{animation-duration:3s}}
 
 /* global loading pill (shows whenever a request is in flight) */
-#loadPill{position:fixed;left:50%;top:14px;transform:translateX(-50%) translateY(-12px);z-index:120;display:flex;align-items:center;gap:9px;background:var(--ink);color:#fff;padding:9px 16px 9px 13px;border-radius:99px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;box-shadow:0 10px 26px rgba(29,20,24,.22)}
+#loadPill{position:fixed;left:50%;top:14px;transform:translateX(-50%) translateY(-12px);z-index:120;display:flex;align-items:center;gap:9px;background:var(--fill);color:#fff;padding:9px 16px 9px 13px;border-radius:99px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;box-shadow:0 10px 26px rgba(29,20,24,.22)}
 #loadPill.on{opacity:1;transform:translateX(-50%) translateY(0)}
 #loadPill .ld-spin{width:15px;height:15px;flex:none;border:2px solid rgba(255,255,255,.32);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite}
 @media(prefers-reduced-motion:reduce){#loadPill .ld-spin{animation-duration:2.4s}}
@@ -235,7 +243,19 @@ dialog h2{padding-right:40px}
 @media print{.top,.tabs,.controls,#toast,#topbar{display:none!important}body{background:#fff}.item{break-inside:avoid}.list{grid-template-columns:1fr 1fr}}
 
 /* ===== redesign: the seven swaras ===== */
-:root{--ink:#1D1418;--maroon:#6B1226;--maroon2:#3F0A18;--ink2:#8B2A40;--paper:#F5F1EA;--card:#fff;--line:#E8E1D8;--muted:#726670;--gold:#D9A441;--gold-soft:#FBF0D6;--teal:#0E7A63;--teal-soft:#DDF3EB;--blue:#2F6FB0;--blue-soft:#E1EDF8;--danger:#C0352B;--danger-soft:#FCE9E6;--head:'Fraunces',Georgia,serif;--body:'Manrope',system-ui,sans-serif;--r:16px;--sh:0 1px 2px rgba(29,20,24,.05),0 8px 24px rgba(29,20,24,.06)}
+:root{--ink:#1D1418;--fill:#1D1418;--maroon:#6B1226;--maroon2:#3F0A18;--ink2:#8B2A40;--paper:#F5F1EA;--card:#fff;--line:#E8E1D8;--muted:#726670;--gold:#D9A441;--gold-soft:#FBF0D6;--teal:#0E7A63;--teal-soft:#DDF3EB;--blue:#2F6FB0;--blue-soft:#E1EDF8;--danger:#C0352B;--danger-soft:#FCE9E6;--head:'Fraunces',Georgia,serif;--body:'Manrope',system-ui,sans-serif;--r:16px;--sh:0 1px 2px rgba(29,20,24,.05),0 8px 24px rgba(29,20,24,.06)}
+/* Dark mode — a toggle for the working app (judging, roster, etc.), for long stretches at a
+   results desk. Only these tokens change; --fill stays a fixed dark tone (not the flipped --ink)
+   so buttons/toast/pressed chips keep white text readable instead of going white-on-white.
+   --maroon/--gold/--teal/etc are left as is: the sidebar and accent colours already read fine
+   on a dark page. */
+:root[data-theme="dark"]{
+  --ink:#EDE6E0;--fill:#2A1F24;--paper:#171014;--card:#241B20;--line:#3C2E33;--muted:#B8ABB1;
+  --gold-soft:#3A2E14;--teal-soft:#0F332B;--blue-soft:#16283A;--danger-soft:#3A1616;
+  color-scheme:dark;
+}
+:root[data-theme="dark"] select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23EDE6E0' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+:root[data-theme="dark"] .login{background:linear-gradient(180deg,#241A1F,var(--paper))}
 body{font:15px/1.5 var(--body);background:var(--paper)}
 h1,h2,h3{font-family:var(--head);letter-spacing:-.01em}
 .login{background:linear-gradient(180deg,#EFE2CB,var(--paper))}
@@ -254,7 +274,8 @@ h1,h2,h3{font-family:var(--head);letter-spacing:-.01em}
 .tabs svg{flex:none;opacity:.9}
 .me{border-top:1px solid rgba(255,255,255,.15);padding-top:14px}
 .who{display:block!important;text-align:left;font-size:12.5px;opacity:.9;margin-bottom:10px;line-height:1.35}
-.me-btns{display:flex;gap:8px}
+.me-btns{display:flex;gap:8px;flex-wrap:wrap}
+.me-btns #themeBtn{flex:0 0 auto;padding-left:14px;padding-right:14px}
 .me .btn{flex:1;background:rgba(255,255,255,.13);color:#fff;padding:8px 10px;font-size:13px}
 .content{min-width:0}
 .pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;max-width:1120px;margin:0 auto;padding:30px 32px 6px}
@@ -267,7 +288,7 @@ h1,h2,h3{font-family:var(--head);letter-spacing:-.01em}
 main{max-width:1120px;margin:0 auto;padding:16px 32px 56px}
 .btn{border-radius:12px;padding:11px 18px;background:var(--maroon);font-weight:700}
 .btn.gold{background:var(--gold);color:#2A1A00}
-.btn.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line)}
+.btn.ghost{background:var(--card);color:var(--ink);border:1.5px solid var(--line)}
 .btn.danger{background:var(--danger)}
 input,select,textarea{border-radius:12px;padding:12px 14px}
 .chip{font-weight:700}
@@ -307,7 +328,7 @@ button.item:hover{border-color:var(--gold)}
 .feed{padding:10px 0;border-top:1px solid var(--line)}.feed:first-of-type{border:0}
 .feed h3{font:700 15px var(--body)}.feed .meta{margin-top:2px}
 .chiprow{display:flex;flex-wrap:wrap;gap:8px}
-.chip2{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:7px 14px;font-weight:700;font-size:13.5px}.chip2:hover{border-color:var(--gold)}
+.chip2{border:1.5px solid var(--line);background:var(--card);border-radius:99px;padding:7px 14px;font-weight:700;font-size:13.5px}.chip2:hover{border-color:var(--gold)}
 .houseRow{border-radius:14px;box-shadow:none}
 .houseRow .bar{height:10px;border-radius:99px}
 .houseRow.lead .rk{color:var(--gold)}
@@ -334,7 +355,7 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
 .mpb{flex:1;height:8px;border-radius:99px;background:var(--line);overflow:hidden}
 .mpb i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold),var(--teal));transition:width .3s}
 .mlist{display:grid;gap:10px;margin:12px 0}
-.mrow{display:grid;grid-template-columns:1fr auto;gap:10px 14px;align-items:start;padding:14px;background:#fff;border:1.5px solid var(--line);border-left:5px solid var(--gold);border-radius:14px}
+.mrow{display:grid;grid-template-columns:1fr auto;gap:10px 14px;align-items:start;padding:14px;background:var(--card);border:1.5px solid var(--line);border-left:5px solid var(--gold);border-radius:14px}
 .mrow.full{border-left-color:var(--teal)}
 .mrow.absent{border-left-color:var(--danger);background:var(--danger-soft)}
 .mwho{font-weight:700;min-width:0;overflow-wrap:anywhere}
@@ -387,6 +408,26 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
 .live-card .win .n{color:#fff}
 .live-card .win small{color:rgba(255,255,255,.62)}
 @media(max-width:520px){.live-stage .swaras{height:min(40vh,280px)}.live-cards{grid-template-columns:1fr}}
+
+/* ===== STAGE-ANNOUNCEMENT VIEW (full-screen, for whoever's on the mic) ===== */
+#announce{position:fixed;inset:0;z-index:140;background:#0B0709;color:#fff;display:flex;align-items:center;justify-content:center;padding:40px 24px;text-align:center}
+.ann-close{position:fixed;top:16px;right:16px;width:50px;height:50px;flex:none;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;border:0;font-size:28px;line-height:1;z-index:3}
+.ann-close:hover{background:rgba(255,255,255,.2)}
+.ann-nav{position:fixed;top:0;bottom:0;width:20%;display:flex;align-items:center;justify-content:center;font-size:52px;color:rgba(255,255,255,.3);z-index:1;border:0;background:none}
+.ann-nav:hover{color:rgba(255,255,255,.6)}
+.ann-prev{left:0}.ann-next{right:0}
+.ann-card{position:relative;z-index:2;max-width:100%;cursor:pointer}
+.ann-event{font:800 clamp(13px,2.1vw,19px) var(--body);letter-spacing:.16em;text-transform:uppercase;opacity:.55;margin-bottom:20px;overflow-wrap:anywhere}
+.ann-place{font:800 clamp(20px,3.2vw,30px) var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
+.ann-name{font:700 clamp(44px,10vw,118px) var(--head);line-height:1.05;overflow-wrap:anywhere}
+.ann-house{font:700 clamp(20px,3.2vw,32px) var(--body);margin-top:24px;display:inline-flex;align-items:center;gap:10px}
+.ann-dot{width:16px;height:16px;border-radius:50%;flex:none}
+.ann-count{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);font:700 13px var(--body);letter-spacing:.08em;opacity:.45;z-index:3}
+@media(max-width:560px){.ann-nav{width:15%;font-size:34px}}
+
+/* ===== SHAREABLE RESULT CARD ===== */
+.shareWrap{display:flex;justify-content:center;background:var(--paper);border-radius:10px;padding:12px;margin-bottom:4px}
+.shareWrap canvas{width:100%;max-width:300px;height:auto;border-radius:10px;box-shadow:var(--sh);display:block}
 </style>
 </head>
 <body>
@@ -416,7 +457,7 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
   <aside class="side">
     <div class="brandrow"><img class="badge" alt="" src="sidebar-badge.webp"><div class="brand">Pratibha<small>Results Desk</small></div></div>
     <nav class="tabs" id="tabs" role="tablist"></nav>
-    <div class="me"><div class="who" id="who"></div><div class="me-btns"><button class="btn" onclick="openPassword()">Password</button><button class="btn" onclick="logout()">Sign out</button></div></div>
+    <div class="me"><div class="who" id="who"></div><div class="me-btns"><button class="btn" id="themeBtn" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button><button class="btn" onclick="openPassword()">Password</button><button class="btn" onclick="logout()">Sign out</button></div></div>
   </aside>
   <div class="content">
     <header class="pagehead"><div><h1 id="pageTitle"></h1><div class="prog-label"><span id="pmain">Loading…</span><span id="pl"></span></div></div><div class="strip loading" id="strip" aria-hidden="true"></div></header>
@@ -436,6 +477,13 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
     <div id="liveLatest" class="live-feed"></div>
   </div>
 </section>
+<div id="announce" hidden>
+  <button type="button" class="ann-close" onclick="closeAnnounce()" aria-label="Close">&times;</button>
+  <button type="button" class="ann-nav ann-prev" onclick="annStep(-1)" aria-label="Previous">&lsaquo;</button>
+  <button type="button" class="ann-nav ann-next" onclick="annStep(1)" aria-label="Next">&rsaquo;</button>
+  <div class="ann-card" id="annCard" onclick="annStep(1)"></div>
+  <div class="ann-count" id="annCount"></div>
+</div>
 <dialog id="dlg"></dialog>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 <div id="netbanner" role="status" aria-live="polite" hidden><i></i>Offline — your entries are saved on this device and will sync automatically</div>
@@ -446,7 +494,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwXZfCpI8nqu6qrWPVbdcbv
 const POLL_MS = 30000;
 
 /* ====== STATE + HELPERS ====== */
-const S = { token:'', me:null, events:[], results:{}, students:[], studentsVer:'', houses:[], users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', stage:'all', q:'', rsort:'chest' };
+const S = { token:'', me:null, events:[], results:{}, students:[], studentsVer:'', houses:[], users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', stage:'all', q:'', rsort:'chest', sortSoon:false };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store = {
@@ -454,6 +502,17 @@ const store = {
   set(k,v){ try{ localStorage.setItem(k,v) }catch(e){} },
   del(k){ try{ localStorage.removeItem(k) }catch(e){} }
 };
+
+/* ====== DARK MODE ====== */
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+  const b = $('#themeBtn'); if (b) b.textContent = t === 'dark' ? '☀️' : '🌙';
+}
+function toggleTheme(){
+  const next = (store.get('prt_theme') || 'light') === 'dark' ? 'light' : 'dark';
+  store.set('prt_theme', next); applyTheme(next);
+}
+applyTheme(store.get('prt_theme') || 'light');   // before first paint, so there's no flash of the other theme
 
 let toastT;
 function toast(msg, bad){
@@ -576,6 +635,16 @@ function fmtTime(iso){
   const t = d.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
   return d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString([], { day:'numeric', month:'short' }) + ', ' + t;
 }
+/* Optional per-event start time (a datetime-local string like "2027-03-14T14:30"), used to sort
+   "what's happening next" in Manage events — parsed as local time same as the <input> that set it. */
+function fmtStart(v){
+  if (!v) return '';
+  const d = new Date(v); if (isNaN(d)) return '';
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return (sameDay ? 'Today' : d.toLocaleDateString([], { day:'numeric', month:'short' })) + ', ' + d.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+}
+// Sort helper: events with a start time come first (soonest first), undated events sink to the end.
+const startCmp = (a, b) => (a.startTime && b.startTime) ? a.startTime.localeCompare(b.startTime) : a.startTime ? -1 : b.startTime ? 1 : 0;
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 const plural = (n, w) => n + ' ' + (n === 1 ? w : w === 'criterion' ? 'criteria' : /[^aeiou]y$/.test(w) ? w.slice(0, -1) + 'ies' : w + 's');
 const ACT = { login:'Signed in', loginFailed:'Failed sign-in', logout:'Signed out', changePassword:'Changed password',
@@ -760,6 +829,7 @@ function paintProgress(){
   $('#pmain').innerHTML = `<b>${done}</b> of ${total} events declared`;
   $('#pl').textContent = total ? Math.round(done * 100 / total) + '%' : '';
   st.innerHTML = `<i style="width:${total ? Math.round(done * 100 / total) : 0}%"></i>`;
+  paintReadyBadge();
 }
 
 /* ====== TABS ====== */
@@ -794,8 +864,17 @@ const ICONS = {
 const icon = k => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k] || ''}</svg>`;
 function buildTabs(){
   const t = tabsFor();
-  $('#tabs').innerHTML = t.map(([k,l]) => `<button role="tab" data-k="${k}" onclick="setTab('${k}')">${icon(k)}<span>${l}</span></button>`).join('');
+  $('#tabs').innerHTML = t.map(([k,l]) => `<button role="tab" data-k="${k}" onclick="setTab('${k}')">${icon(k)}<span>${l}</span>${k === 'enter' ? '<span class="tabBadge" id="readyBadge" hidden></span>' : ''}</button>`).join('');
   setTab(t[0][0]);
+  paintReadyBadge();
+}
+/* "Ready to declare" nudge for admin/master: a count of events where every judge on the panel
+   has locked their marks but nobody has declared the result yet — otherwise you only notice this
+   by opening "All events" and scanning the status pills yourself. */
+function paintReadyBadge(){
+  const b = $('#readyBadge'); if (!b) return;
+  const n = S.loaded ? S.events.filter(e => e.canEdit && e.status === 'ready').length : 0;
+  b.textContent = n; b.hidden = !n;
 }
 async function setTab(k){
   S.tab = k; S.filter = 'all'; S.stage = 'all'; S.q = '';
@@ -860,7 +939,8 @@ async function setTab(k){
       <p class="meta">One event per line: Name | Category | Venue</p>
       <textarea id="bulk" rows="5" placeholder="Group Song | On-Stage Group | Main Auditorium"></textarea>
       <div class="actions"><button type="button" class="btn ghost" id="addBtn" onclick="addEvents()">Add events</button></div></details>
-      <div class="controls"><input id="q" type="search" placeholder="Search events" oninput="S.q=this.value;paint()"></div><div id="list" class="list"></div>`;
+      <div class="controls"><input id="q" type="search" placeholder="Search events" oninput="S.q=this.value;paint()">
+      <button class="chip" id="soonChip" aria-pressed="${S.sortSoon}" onclick="toggleSoonSort()">Starting soon first</button></div><div id="list" class="list"></div>`;
     $('#af').addEventListener('submit', addOne);
   } else if (k === 'log'){
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search activity" oninput="S.q=this.value;paint()">
@@ -889,6 +969,11 @@ const eventStage = e => /^on-stage/i.test(e.category || '') ? 'on' : /^off-stage
 function setStage(f){
   S.stage = f;
   document.querySelectorAll('[data-sf]').forEach(c => c.setAttribute('aria-pressed', c.dataset.sf === f));
+  paint();
+}
+function toggleSoonSort(){
+  S.sortSoon = !S.sortSoon;
+  const c = $('#soonChip'); if (c) c.setAttribute('aria-pressed', S.sortSoon);
   paint();
 }
 
@@ -959,7 +1044,8 @@ function paint(){
         .filter(x => r[x[1]]).map(x => `<li><span class="pl">${x[0]}</span><span class="n">${esc(r[x[1]])}${r[x[2]] ? `<small>${esc(r[x[2]])}</small>` : ''}</span></li>`).join('');
       return `<div class="item"><div class="row"><h3>${esc(e.name)}</h3><span class="pill done">${esc(fmtTime(r.at))}</span></div>
         <div class="meta">${esc([e.category, e.venue].filter(Boolean).join(', '))}</div><ul class="win">${rows}</ul>
-        ${r.notes ? `<div class="note">${esc(r.notes)}</div>` : ''}<div class="note">Entered by ${esc(r.by)}</div></div>`;
+        ${r.notes ? `<div class="note">${esc(r.notes)}</div>` : ''}<div class="note">Entered by ${esc(r.by)}</div>
+        <div class="cardacts"><div class="cardacts-row"><button class="btn ghost small" onclick="openShareCard('${e.id}')">Share result</button><button class="btn ghost small" onclick="openAnnounce('${e.id}')">Announce</button></div></div></div>`;
     }).join('') : '<div class="empty">No results declared yet. New results appear here within seconds.</div>';
     const pend = S.events.filter(e => !isDone(e.id));
     $('#waiting').textContent = pend.length ? 'Waiting for: ' + pend.map(e => e.name).join(', ') : 'All events declared.';
@@ -984,10 +1070,11 @@ function paint(){
       : '<div class="empty">No accounts yet.</div>';
   }
   else if (S.tab === 'manage'){
-    const list = S.events.filter(match);
+    let list = S.events.filter(match);
+    if (S.sortSoon) list = list.slice().sort(startCmp);
     L.innerHTML = list.length ? list.map(e => { const st = statusPill(e); return `<div class="item"><div class="row"><h3>${esc(e.name)}</h3>
       <span class="pill ${st.cls}">${esc(st.label)}</span></div>
-      <div class="meta">${esc(e.id)}${e.category ? ', ' + esc(e.category) : ''}${e.venue ? ', ' + esc(e.venue) : ''}</div><div class="tagRow"><span class="tag">${e.judgesNeeded ? e.judgeCount + ' of ' + plural(e.judgesNeeded, 'judge') : plural(e.judgeCount, 'judge')}</span><span class="tag">${e.criteriaCount ? plural(e.criteriaCount, 'criterion') : 'One mark out of ' + e.maxMark}</span></div>
+      <div class="meta">${esc(e.id)}${e.category ? ', ' + esc(e.category) : ''}${e.venue ? ', ' + esc(e.venue) : ''}</div><div class="tagRow"><span class="tag">${e.judgesNeeded ? e.judgeCount + ' of ' + plural(e.judgesNeeded, 'judge') : plural(e.judgeCount, 'judge')}</span><span class="tag">${e.criteriaCount ? plural(e.criteriaCount, 'criterion') : 'One mark out of ' + e.maxMark}</span>${e.startTime ? `<span class="tag">${esc(fmtStart(e.startTime))}</span>` : ''}</div>
       <div class="cardacts"><button class="btn ghost small" onclick="openEditor('${e.id}')">${isDone(e.id) ? 'View / edit result' : 'Enter result'}</button><div class="cardacts-row"><button class="btn ghost small" onclick="openEventEdit('${e.id}')">Edit</button><button class="btn ghost small" onclick="openCriteria('${e.id}')">Criteria</button>
       <button class="btn ghost small" onclick="printEventReport('${e.id}')">Report</button>
       <button class="btn ghost small" onclick="delEvent('${e.id}')">Delete</button></div></div></div>`; }).join('')
@@ -1675,6 +1762,8 @@ function openEventEdit(id){
   <form id="ef"><label>Event name <input name="name" value="${esc(e.name)}" required></label>
   ${catField(e.category)}
   <label>Venue <input name="venue" value="${esc(e.venue)}"></label>
+  <label>Start time <input name="startTime" type="datetime-local" value="${esc(e.startTime||'')}"></label>
+  <p class="hint">Optional — just lets "Starting soon first" (Manage events) sort by it.</p>
   <fieldset><legend>Judging</legend>
   <label>Max mark per judge (used when there are no criteria) <input name="maxMark" type="number" min="1" value="${e.maxMark}"></label>
   <label>Judges on the panel <input name="judges" type="number" min="1" max="7" value="${e.judgesNeeded || ''}" placeholder="Not set (up to 3)"></label>
@@ -1687,7 +1776,7 @@ function openEventEdit(id){
   $('#ef').addEventListener('submit', async ev => {
     ev.preventDefault(); const f = ev.target, b = $('#sb'); b.disabled = true;
     try {
-      await api('updateEvent', { id, name:f.name.value, category:readCat(f), venue:f.venue.value,
+      await api('updateEvent', { id, name:f.name.value, category:readCat(f), venue:f.venue.value, startTime:f.startTime.value,
         maxMark:f.maxMark.value, judges:f.judges.value, ptsFirst:f.ptsFirst.value, ptsSecond:f.ptsSecond.value, ptsThird:f.ptsThird.value });
       closeDlg(); celebrate('Event updated'); await refresh();
     }
@@ -1723,7 +1812,7 @@ async function openCriteria(id){
   };
 }
 async function importOfficial(){
-  if (!await confirmBox('Load the official event list?', 'Adds the events from the guidelines that are missing. Elocution, essays, poems, stories and recitation get one event per language. Old general events like "Elocution" or "Essay Writing" are removed only if they have no results or marks yet. Vocal, dance, debate, elocution, recitation, mono act and mimicry events get their judging criteria from the fest\u2019s judging-criteria sheets (5 criteria of 10 marks each, 50 total, editable).', 'Load events')) return;
+  if (!await confirmBox('Load the official event list?', 'Adds the events from the guidelines that are missing. Elocution, essays, poems, stories and recitation get one event per language. Old general events like "Elocution" or "Essay Writing" are removed only if they have no results or marks yet. Vocal, dance, debate, elocution, recitation, mono act, mimicry, instrumental music, short film, rangoli, photography, mime, mehendi design, water colouring, story/poetry/essay writing, pencil drawing, fancy dress, collage and clay modelling events get their judging criteria from the fest\u2019s judging-criteria sheets (50 total per event, split evenly across criteria unless the sheet says otherwise, editable).', 'Load events')) return;
   try { const j = await api('importOfficialEvents'); toast(j.added + ' events added, ' + j.removed + ' old removed'); await refresh(); }
   catch(e){ toast(e.message, true); }
 }
@@ -1801,6 +1890,146 @@ function printSheet(){
   <script>onload = () => print()<\/script>`);
   w.document.close();
 }
+
+/* ====== SHARE RESULT CARD + STAGE ANNOUNCEMENT ====== */
+// Shared by both features: the declared placings for one event, in display order, each with
+// the student's house looked up from the roster (via the chest number saved with the result).
+const PLACES = [['1st','p1','c1','x1','\u{1F947}'],['2nd','p2','c2','x2','\u{1F948}'],['3rd','p3','c3','x3','\u{1F949}'],['Runner-up','p4','c4','x4','\u{1F396}\uFE0F']];
+function resultWinners(r){
+  return PLACES.filter(x => r[x[1]]).map(x => {
+    const s = studentBy(r[x[3]]);
+    return { place:x[0], medal:x[4], name:r[x[1]], cls:r[x[2]] || (s ? s.cls : ''), house: s ? s.house : '' };
+  });
+}
+function resultCaption(e, r){
+  const lines = ['\u{1F3C6} ' + e.name + (e.category ? ' (' + e.category + ')' : ''), ''];
+  resultWinners(r).forEach(w => lines.push(w.medal + ' ' + w.place + ': ' + w.name + (w.house ? ' \u2014 ' + w.house : '') + (w.cls ? ' (' + w.cls + ')' : '')));
+  lines.push('', 'Pratibha 2026-27 \u00b7 Celebrate the Seven');
+  return lines.join('\n');
+}
+
+/* ---- share card: a small branded PNG for posting to WhatsApp/Instagram ---- */
+function roundRect_(ctx, x, y, w, h, r){
+  ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function wrapLines_(ctx, text, maxWidth){
+  const words = String(text).split(' '), lines = []; let cur = '';
+  words.forEach(w => {
+    const test = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && cur){ lines.push(cur); cur = w; } else cur = test;
+  });
+  if (cur) lines.push(cur);
+  return lines;
+}
+async function drawResultCard(cv, e, r){
+  const W = 1080, H = 1350, ctx = cv.getContext('2d');
+  cv.width = W; cv.height = H;
+  try { await Promise.all(['800 30px Manrope','700 60px Fraunces','700 40px Manrope','600 26px Manrope'].map(f => document.fonts.load(f))); } catch(err){}
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, '#6B1226'); g.addColorStop(1, '#2A0710');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#D9A441'; ctx.fillRect(0, 0, W, 14);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = '800 30px Manrope, sans-serif';
+  ctx.fillText('PRATIBHA 2026\u201327 \u00b7 RESULT', W / 2, 110);
+  ctx.fillStyle = '#fff'; ctx.font = '700 60px Fraunces, Georgia, serif';
+  const nameLines = wrapLines_(ctx, e.name, W - 140).slice(0, 3);
+  let y = 205;
+  nameLines.forEach(line => { ctx.fillText(line, W / 2, y); y += 68; });
+  if (e.category){
+    ctx.font = '600 28px Manrope, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.68)';
+    ctx.fillText(e.category, W / 2, y + 6); y += 50;
+  }
+  y += 46;
+  const winners = resultWinners(r);
+  const rowH = Math.min(190, (H - y - 130) / Math.max(1, winners.length));
+  ctx.textAlign = 'left';
+  winners.forEach((w, i) => {
+    const ry = y + i * rowH, boxH = rowH - 18;
+    ctx.fillStyle = 'rgba(255,255,255,.08)';
+    roundRect_(ctx, 70, ry, W - 140, boxH, 20); ctx.fill();
+    ctx.font = '44px "Segoe UI Emoji","Noto Color Emoji",sans-serif'; ctx.fillStyle = '#fff';
+    ctx.fillText(w.medal, 100, ry + boxH / 2 + 14);
+    ctx.font = '700 40px Manrope, sans-serif';
+    const nm = wrapLines_(ctx, w.name, W - 340)[0] || w.name;
+    ctx.fillText(nm, 195, ry + boxH / 2 - 6);
+    const sub = [w.place, w.cls, w.house].filter(Boolean).join(' \u00b7 ');
+    ctx.font = '600 25px Manrope, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.7)';
+    ctx.fillText(sub, 195, ry + boxH / 2 + 32);
+    if (w.house){
+      ctx.fillStyle = hc(w.house); ctx.beginPath();
+      ctx.arc(W - 115, ry + boxH / 2, 12, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+  ctx.textAlign = 'center'; ctx.font = '700 26px Manrope, sans-serif'; ctx.fillStyle = '#D9A441';
+  ctx.fillText('Celebrate the Seven', W / 2, H - 56);
+}
+async function openShareCard(id){
+  const e = S.events.find(x => x.id === id), r = S.results[id];
+  if (!e || !r) return;
+  openDlg(`<h2>Share result</h2><p class="sub">${esc(e.name)} \u2014 save the image or copy the caption to post.</p>
+  <div class="shareWrap"><canvas id="shareCv"></canvas></div>
+  <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Close</button>
+  <button type="button" class="btn ghost" id="capBtn">Copy caption</button>
+  <button type="button" class="btn gold" id="dlBtn">Download image</button></div>`);
+  const cv = $('#shareCv');
+  await drawResultCard(cv, e, r);
+  $('#dlBtn').onclick = () => {
+    cv.toBlob(b => {
+      if (!b) return toast('Could not create the image', true);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b); a.download = (e.name.replace(/[^a-z0-9]+/gi, '_') || 'result') + '.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    });
+  };
+  $('#capBtn').onclick = async () => {
+    try { await navigator.clipboard.writeText(resultCaption(e, r)); toast('Caption copied'); }
+    catch(err){ toast('Could not copy \u2014 your browser may need this page to be open in a tab, not embedded', true); }
+  };
+}
+
+/* ---- stage-announcement view: full-screen, place + name + house, nothing else ---- */
+let annState = null;
+function openAnnounce(id){
+  const e = S.events.find(x => x.id === id), r = S.results[id];
+  if (!e || !r) return;
+  const winners = resultWinners(r);
+  if (!winners.length) return;
+  annState = { e, winners, i: 0 };
+  $('#announce').hidden = false;
+  document.body.style.overflow = 'hidden';
+  paintAnnounce();
+}
+function paintAnnounce(){
+  if (!annState) return;
+  const { e, winners, i } = annState, w = winners[i];
+  $('#annCard').innerHTML = `<div class="ann-event">${esc(e.name)}</div><div class="ann-place">${w.medal} ${esc(w.place)}</div>
+    <div class="ann-name">${esc(w.name)}</div>${w.house ? `<div class="ann-house"><span class="ann-dot" style="background:${hc(w.house)}"></span>${esc(w.house)}</div>` : ''}`;
+  const multi = winners.length > 1;
+  $('#annCount').textContent = multi ? (i + 1) + ' / ' + winners.length : '';
+  // Nothing to step to with only one placing — hide the arrows instead of leaving dead buttons.
+  document.querySelectorAll('.ann-nav').forEach(b => { b.hidden = !multi; });
+}
+function annStep(d){
+  if (!annState) return;
+  const n = annState.winners.length;
+  annState.i = (annState.i + d + n) % n;
+  paintAnnounce();
+}
+function closeAnnounce(){
+  $('#announce').hidden = true; annState = null; document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => {
+  if ($('#announce').hidden) return;
+  // preventDefault matters here beyond stopping page scroll: without it, Space/Enter on a
+  // focused button (e.g. the × close button) would ALSO fire that button's own click handler,
+  // double-triggering the action.
+  if (e.key === 'Escape'){ e.preventDefault(); closeAnnounce(); }
+  else if (e.key === 'ArrowRight' || e.key === ' '){ e.preventDefault(); annStep(1); }
+  else if (e.key === 'ArrowLeft'){ e.preventDefault(); annStep(-1); }
+});
 
 /* ====== CERTIFICATES ====== */
 function certRows(){
