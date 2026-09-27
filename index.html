@@ -335,6 +335,7 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
 .mlist{display:grid;gap:10px;margin:12px 0}
 .mrow{display:grid;grid-template-columns:1fr auto;gap:10px 14px;align-items:start;padding:14px;background:#fff;border:1.5px solid var(--line);border-left:5px solid var(--gold);border-radius:14px}
 .mrow.full{border-left-color:var(--teal)}
+.mrow.absent{border-left-color:var(--danger);background:var(--danger-soft)}
 .mwho{font-weight:700;min-width:0;overflow-wrap:anywhere}
 .mwho small{display:block;color:var(--muted);font-weight:500;font-size:13px}
 .mtot{text-align:right;font-family:var(--head)}
@@ -345,7 +346,12 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
 .mc em{font-style:normal;opacity:.75}
 .mc input{height:52px;margin-top:4px;padding:8px 6px;font-size:20px;font-weight:700;text-align:center}
 .mc input.bad{border-color:var(--danger);background:var(--danger-soft)}
-.mx{grid-column:1/-1;justify-self:start;border:0;background:none;padding:0;color:var(--danger);font-weight:700;font-size:13px}
+.mabsentNote{grid-column:1/-1;font-size:13.5px;color:var(--danger);font-weight:600}
+.mrowacts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:18px}
+.mx{border:0;background:none;padding:0;font-weight:700;font-size:13px}
+.mx.danger{color:var(--danger)}
+.mx.warn{color:#8A5B00}
+.mx.ok{color:var(--teal)}
 .mbar{position:sticky;bottom:-26px;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;margin:16px -24px -26px;padding:12px 24px;background:var(--card);border-top:1px solid var(--line)}
 .mbar .hint{margin:0 auto 0 0}
 
@@ -1276,7 +1282,9 @@ function renderJudging(j){
   const overBanner = (j.overLimit || []).map(o => `<p class="err">${esc(o.house)} has ${o.count} entries in this event. The limit is ${o.limit} per house.</p>`).join('') + (j.warnings || []).map(w => `<p class="err">${esc(w)}</p>`).join('');
   const cols = crit.length ? crit.map(c => `<th>${esc(c.name)}<br><small>/${c.max}</small></th>`).join('') : '<th>Mark</th>';
   const rows = j.entries.map((r, i) => {
-    const cells = j.judges.map(jg => `<td>${r.perJudge[jg.email] === null ? '—' : r.perJudge[jg.email]}${jg.locked ? '' : ' <small>(draft)</small>'}</td>`).join('');
+    const cells = r.absent
+      ? `<td colspan="${Math.max(1, j.judges.length)}"><span class="pill off">Absent</span>${r.absentBy ? `<br><small>${esc(r.absentBy)}</small>` : ''}</td>`
+      : j.judges.map(jg => `<td>${r.perJudge[jg.email] === null ? '—' : r.perJudge[jg.email]}${jg.locked ? '' : ' <small>(draft)</small>'}</td>`).join('');
     const cls = r.rank === 1 ? 'rankTop1' : r.rank === 2 ? 'rankTop2' : r.rank === 3 ? 'rankTop3' : '';
     return `<tr class="${cls}"><td class="who">${whoCell(r)}</td>
       ${cells}<td><b>${r.avg === null ? '—' : r.avg}</b></td><td>${r.rank ?? '—'}</td></tr>`;
@@ -1325,11 +1333,17 @@ function renderScoring(j, draft){
   const maxTotal = cols.reduce((a, c) => a + Number(c.max), 0);
   const rows = j.entries.map(r => {
     const mc = r.mineCrit || {};
-    return `<div class="mrow" data-chest="${esc(r.chest)}"><div class="mwho">${whoCell(r)}</div>
-      <div class="mtot"><b>—</b><small>of ${maxTotal}</small></div>
-      <div class="mcrit">${cols.map(c => { const v = draft[r.chest + '|' + c.id] ?? mc[c.id] ?? '';
-        return `<label class="mc"><span>${esc(c.name)} <em>/ ${c.max}</em></span><input type="number" inputmode="decimal" min="0" max="${c.max}" step="any" data-c="${c.id}" data-max="${c.max}" value="${v}" ${dis}></label>`; }).join('')}</div>
-      ${me.locked ? '' : `<button type="button" class="mx" onclick="removeEntry('${ev.id}','${esc(r.chest)}')">Remove #${esc(r.chest)}</button>`}</div>`;
+    const abs = !!r.absent;
+    return `<div class="mrow${abs ? ' absent' : ''}" data-chest="${esc(r.chest)}"><div class="mwho">${whoCell(r)}</div>
+      <div class="mtot"><b>${abs ? 'Absent' : '—'}</b><small>of ${maxTotal}</small></div>
+      ${abs
+        ? `<p class="mabsentNote">Marked absent${r.absentBy ? ' by ' + esc(r.absentBy) : ''}${r.absentAt ? ' · ' + esc(fmtTime(r.absentAt)) : ''} — no marks are entered for this student.</p>`
+        : `<div class="mcrit">${cols.map(c => { const v = draft[r.chest + '|' + c.id] ?? mc[c.id] ?? '';
+        return `<label class="mc"><span>${esc(c.name)} <em>/ ${c.max}</em></span><input type="number" inputmode="decimal" min="0" max="${c.max}" step="any" data-c="${c.id}" data-max="${c.max}" value="${v}" ${dis}></label>`; }).join('')}</div>`}
+      ${me.locked ? '' : `<div class="mrowacts">
+        <button type="button" class="mx ${abs ? 'ok' : 'warn'}" onclick="toggleAbsent('${ev.id}','${esc(r.chest)}',${abs ? 'false' : 'true'})">${abs ? 'Mark present' : 'Mark absent'}</button>
+        <button type="button" class="mx danger" onclick="removeEntry('${ev.id}','${esc(r.chest)}')">Remove #${esc(r.chest)}</button>
+      </div>`}</div>`;
   }).join('');
   openDlg(`<h2>${esc(ev.name)}</h2>
   <div class="mhead"><span>${crit.length ? plural(crit.length, 'criterion') : 'One overall mark'}</span><span>${maxTotal} marks per student</span></div>
@@ -1354,8 +1368,10 @@ function renderScoring(j, draft){
   const rowsEl = () => [...dlg.querySelectorAll('#mtbl .mrow')];
   const inputs = () => [...dlg.querySelectorAll('#mtbl input[data-c]')];
   const calc = () => {
-    let full = 0;
+    let full = 0, n = 0;
     rowsEl().forEach(tr => {
+      if (tr.classList.contains('absent')) return;   // excluded from progress — nothing to mark for them
+      n++;
       let sum = 0, all = true;
       tr.querySelectorAll('input[data-c]').forEach(i => {
         i.classList.toggle('bad', i.value !== '' && (Number(i.value) < 0 || Number(i.value) > Number(i.dataset.max)));
@@ -1364,7 +1380,6 @@ function renderScoring(j, draft){
       tr.querySelector('.mtot b').textContent = all ? Math.round(sum * 100) / 100 : '—';
       tr.classList.toggle('full', all); if (all) full++;
     });
-    const n = j.entries.length;
     $('#cnt').textContent = n ? full + ' of ' + plural(n, 'student') + ' fully marked' : '';
     $('#mpi').style.width = n ? Math.round(full * 100 / n) + '%' : '0';
   };
@@ -1489,6 +1504,14 @@ function renderScoring(j, draft){
     if (!ok){ openScoring(ev.id); return; }
     try { await api('lockSubmission', { eventId: ev.id }); celebrate('Marks submitted'); closeDlg(); } catch(e){ toast(e.message, true); }
   };
+}
+async function toggleAbsent(eventId, chest, absent){
+  if (absent && !confirm('Mark #' + chest + ' absent for this event? Any marks entered for them are cleared, and they will not count for the average.')) return;
+  try {
+    const d = {}; dlg.querySelectorAll('#mtbl .mrow').forEach(tr => { if (tr.dataset.chest !== chest) tr.querySelectorAll('input[data-c]').forEach(i => { if (i.value !== '') d[tr.dataset.chest + '|' + i.dataset.c] = i.value; }); });
+    await api('setAbsent', { eventId, chest, absent });
+    renderScoring(await api('judging', { eventId, as:'judge' }), d);
+  } catch(e){ toast(e.message, true); }
 }
 async function removeEntry(eventId, chest){
   if (!confirm('Remove #' + chest + ' from this event? Any marks you entered for them are deleted.')) return;
@@ -1752,7 +1775,7 @@ async function printEventReport(id){
   <h3>Result</h3>${resultRows ? `<table><tr><th>Place</th><th>Winner</th><th>Class</th></tr>${resultRows}</table>` : '<p><small>Not declared yet.</small></p>'}
   ${r.notes ? `<p><small>${esc(r.notes)}</small></p>` : ''}
   <h3>Entries and marks</h3>${j.entries.length ? `<table><tr><th>Rank</th><th>Participant</th>${j.judges.map(g => `<th>${esc(g.name)}</th>`).join('')}<th>Average</th></tr>
-  ${j.entries.map(row => `<tr><td>${row.rank ?? '—'}</td><td>${esc(row.name)}<br><small>#${esc(row.chest)} · ${esc([row.cls, row.house].filter(Boolean).join(', '))}</small></td>${j.judges.map(g => `<td>${cell(row, g)}</td>`).join('')}<td><b>${row.avg ?? '—'}</b></td></tr>`).join('')}</table>`
+  ${j.entries.map(row => `<tr><td>${row.rank ?? '—'}</td><td>${esc(row.name)}<br><small>#${esc(row.chest)} · ${esc([row.cls, row.house].filter(Boolean).join(', '))}</small></td>${row.absent ? `<td colspan="${Math.max(1, j.judges.length)}"><b>Absent</b>${row.absentBy ? ` <small>(${esc(row.absentBy)})</small>` : ''}</td>` : j.judges.map(g => `<td>${cell(row, g)}</td>`).join('')}<td><b>${row.absent ? 'Absent' : (row.avg ?? '—')}</b></td></tr>`).join('')}</table>`
   : '<p><small>No participants entered.</small></p>'}
   <script>onload = () => print()<\/script>`);
   w.document.close();
@@ -1772,7 +1795,7 @@ function printSheet(){
   <h2 style="margin:0">Pratibha 2026-27 · ${esc(ev.name)}</h2>
   <p>${cr.length ? 'Criteria: ' + cr.map(c => esc(c.name) + ' /' + c.max).join(', ') : 'Overall mark out of ' + ev.maxMark}<br>Average of ${plural(j.judges.length, 'judge')} · printed ${esc(new Date().toLocaleString())}</p>
   <table><tr><th>Rank</th><th>Participant</th>${j.judges.map(g => `<th>${esc(g.name)}</th>`).join('')}<th>Average</th></tr>
-  ${j.entries.map(r => `<tr><td>${r.rank ?? '—'}</td><td>${esc(r.name)}<br><small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small></td>${j.judges.map(g => `<td>${cell(r, g)}</td>`).join('')}<td><b>${r.avg ?? '—'}</b></td></tr>`).join('')}</table>
+  ${j.entries.map(r => `<tr><td>${r.rank ?? '—'}</td><td>${esc(r.name)}<br><small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small></td>${r.absent ? `<td colspan="${Math.max(1, j.judges.length)}"><b>Absent</b>${r.absentBy ? ` <small>(${esc(r.absentBy)})</small>` : ''}</td>` : j.judges.map(g => `<td>${cell(r, g)}</td>`).join('')}<td><b>${r.absent ? 'Absent' : (r.avg ?? '—')}</b></td></tr>`).join('')}</table>
   <div class="sig">${j.judges.map(g => `<div>${esc(g.name)}<br><small>Judge signature</small></div>`).join('')}</div>
   <script>onload = () => print()<\/script>`);
   w.document.close();
