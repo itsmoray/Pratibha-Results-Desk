@@ -1263,7 +1263,7 @@ const stageCls = s => s === 'On-stage' ? 'on' : s === 'Off-stage' ? 'off' : s ==
 /* ====== JUDGING (admin review + declare) ====== */
 const whoCell = r => r.missing
   ? `<span class="errTxt">Chest #${esc(r.chest)}</span><small>not on the roster — safe to remove</small>`
-  : `${esc(r.name)}<small>#${esc(r.chest)} · ${esc([r.cls, r.house].filter(Boolean).join(', '))}</small>`;
+  : `${esc(r.name)} <span class="pill wait">#${esc(r.chest)}</span><small>${esc([r.cls, r.house].filter(Boolean).join(', '))}</small>`;
 async function openJudging(id){
   openDlg(`<h2>Loading…</h2><div class="sk-l w60"></div><div class="sk-l w40"></div>`);
   let j;
