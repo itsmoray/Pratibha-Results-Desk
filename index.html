@@ -1626,7 +1626,7 @@ async function removeEntry(eventId, chest){
   if (!confirm('Remove #' + chest + ' from this event? Any marks you entered for them are deleted.')) return;
   try {
     const d = {}; dlg.querySelectorAll('#mtbl .mrow').forEach(tr => { if (tr.dataset.chest !== chest) tr.querySelectorAll('input[data-c]').forEach(i => { if (i.value !== '') d[tr.dataset.chest + '|' + i.dataset.c] = i.value; }); });
-    await api('removeEntry', { eventId, chest }); renderScoring(await api('judging', { eventId }), d);
+    await api('removeEntry', { eventId, chest }); renderScoring(await api('judging', { eventId, as:'judge' }), d);
   } catch(e){ toast(e.message, true); }
 }
 
