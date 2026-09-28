@@ -667,7 +667,7 @@ const startCmp = (a, b) => (a.startTime && b.startTime) ? a.startTime.localeComp
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 const plural = (n, w) => n + ' ' + (n === 1 ? w : w === 'criterion' ? 'criteria' : /[^aeiou]y$/.test(w) ? w.slice(0, -1) + 'ies' : w + 's');
 const ACT = { login:'Signed in', loginFailed:'Failed sign-in', logout:'Signed out', changePassword:'Changed password',
-  saveResult:'Saved result', createUser:'Created account', updateUser:'Updated account', deleteUser:'Deleted account',
+  saveResult:'Declared result (entered manually)', createUser:'Created account', updateUser:'Updated account', deleteUser:'Deleted account',
   addEvents:'Added events', updateEvent:'Edited event', deleteEvent:'Deleted event',
   setCriteria:'Set judging criteria', addStudents:'Added roster students', updateStudent:'Edited student',
   deleteStudent:'Deleted student', clearStudents:'Cleared the roster', linkStudent:'Linked chest numbers', unlinkStudent:'Unlinked chest numbers',
