@@ -1086,8 +1086,8 @@ function paint(){
     L.innerHTML = S.users.length ? S.users.map(u => `<div class="item"><div class="row"><h3>${esc(u.name)}</h3>
       <span class="pill ${u.active ? 'done' : 'off'}">${u.active ? esc(u.role === 'master' ? 'Master Judge' : cap(u.role)) : 'Disabled'}</span></div>
       <div class="meta">${esc(u.email)}${(u.role === 'judge' || u.role === 'master') ? ', ' + (u.events === 'ALL' ? 'all events' : plural(u.events ? u.events.split(',').length : 0, 'event')) : ''}</div>
-      <div class="cardacts"><div class="cardacts-row"><button class="btn ghost small" onclick="openUser('${esc(u.email)}')">Edit</button>
-      ${u.email === S.me.email ? '' : `<button class="btn ghost small" onclick="delUser('${esc(u.email)}')">Delete</button>`}</div></div></div>`).join('')
+      <div class="cardacts"><div class="cardacts-row">${(role() === 'master' && u.role !== 'judge' && u.email !== S.me.email) ? '' : `<button class="btn ghost small" onclick="openUser('${esc(u.email)}')">Edit</button>`}
+      ${(u.email === S.me.email || (role() === 'master' && u.role !== 'judge')) ? '' : `<button class="btn ghost small" onclick="delUser('${esc(u.email)}')">Delete</button>`}</div></div></div>`).join('')
       : '<div class="empty">No accounts yet.</div>';
   }
   else if (S.tab === 'manage'){
@@ -1695,7 +1695,7 @@ function openUser(email){
   <form id="uf">
   ${u ? '' : '<label>Email <input name="email" type="email" inputmode="email" placeholder="name@example.com" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" required></label>'}
   <label>Full name <input name="name" value="${esc(u ? u.name : '')}" required></label>
-  <label>Role <select name="role" id="ur">${(!u && role() === 'master')
+  <label>Role <select name="role" id="ur">${(role() === 'master' && !(u && u.email === S.me.email))
     ? '<option value="judge">Judge (enters marks only)</option>'
     : '<option value="judge">Judge (enters marks only)</option><option value="viewer">Certificate committee (view only)</option><option value="master">Master Judge (admin access, no accounts/activity)</option><option value="admin">Admin (full access)</option>'}</select></label>
   <label>${u ? 'New password (leave empty to keep)' : 'Password'}
