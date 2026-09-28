@@ -583,13 +583,29 @@ async function api(action, payload = {}, silent){
     // connection and not something we can fix here, just something to quietly outlast, so a bad
     // reply gets more attempts and a longer wait than a plain network drop.
     const MAX_ATTEMPTS = 5;
+    // One id for this action, reused on every retry: the server remembers the result under it, so a
+    // retry after a lost response gets the original answer back instead of doing the work twice.
+    const rid = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    const deadline = Date.now() + 90000;   // how long to keep waiting on a request the server is still working on
+    let timedOut = false;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++){
-      badReply = false;
+      badReply = false; timedOut = false;
+      // Without a timeout a request Google never answers hangs forever and the page stays stuck
+      // until it's reloaded. Give up on the attempt after 45s and retry (safe now, see rid above).
+      const ctl = new AbortController(), killT = setTimeout(() => ctl.abort(), 45000);
       try {
-        res = await fetch(API_URL, { method:'POST', redirect:'follow', body: JSON.stringify({ action, token:S.token, ...payload }) });
+        res = await fetch(API_URL, { method:'POST', redirect:'follow', signal: ctl.signal, body: JSON.stringify({ action, token:S.token, rid, ...payload }) });
         raw = await res.text();
+        clearTimeout(killT);
         j = JSON.parse(raw);
         lastErr = null;
+        // 'WORKING': the server is still running this exact action from an earlier try. Just wait —
+        // don't count it as a failed attempt and don't start a second copy.
+        if (!j.ok && j.code === 'WORKING' && Date.now() < deadline){
+          if (!silent) $('#loadPillText').textContent = 'Still working…';
+          await new Promise(r => setTimeout(r, 1500));
+          attempt--; continue;
+        }
         // A BUSY reply means the server itself is fine — it just lost a race for the same
         // resource lock (e.g. two judges saving the same event at once) and asked us to
         // retry. That's not a dropped connection, but it's just as safe to retry quietly:
@@ -601,7 +617,9 @@ async function api(action, payload = {}, silent){
         }
         break;
       } catch(e){
+        clearTimeout(killT);
         lastErr = e;
+        if (e && e.name === 'AbortError') timedOut = true;
         if (e instanceof SyntaxError){
           // Not a network problem — the request reached a server, but got back something
           // that isn't JSON (e.g. a transient Google Drive/Sheets error page under heavy
@@ -616,8 +634,8 @@ async function api(action, payload = {}, silent){
       }
     }
     if (lastErr){
-      throw new Error(badReply
-        ? 'Google\u2019s servers had a hiccup delivering the response. Please try again in a moment — nothing was lost.'
+      throw new Error(badReply || timedOut
+        ? 'Google\u2019s servers are slow to answer. Your last action may still have gone through — wait a few seconds and check before repeating it. Your entries are still on this screen.'
         : 'No connection. Check your internet — your entries are still on this screen, nothing was lost.');
     }
     if (!j.ok){
