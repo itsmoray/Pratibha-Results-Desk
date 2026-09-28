@@ -690,7 +690,7 @@ const role = () => S.me ? S.me.role : '';
    (or being actively judged) surface above ones nobody has touched yet. */
 const STATUS_RANK = { ready:0, submitted:1, judging:2, pending:3, unassigned:4, declared:5 };
 function statusPill(e, jv){
-  const code = jv ? e.myStatus : e.status;
+  const code = (jv && role() !== 'master') ? e.myStatus : e.status;   // a master judge sees the event's overall progress, like the All events tab
   const left = e.judgeCount - e.judgeDone;
   switch (code){
     case 'declared':   return { cls:'done', label:'Declared', rank:STATUS_RANK.declared };
