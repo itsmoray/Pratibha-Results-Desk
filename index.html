@@ -317,6 +317,10 @@ button.item:hover{border-color:var(--gold)}
 .swaras{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;align-items:end;height:220px}
 .sw{display:grid;grid-template-rows:auto 1fr auto auto;justify-items:center;height:100%;min-width:0;text-align:center}
 .sw .pts{font:700 20px var(--head)}
+/* Crown sits BESIDE the number on the same line, in a box with a fixed height. Since the box's height
+   is a plain constant — not derived from whether a crown is present — every house's top area is
+   guaranteed identical, and a crown can never spill into or squeeze anything below it. */
+.sw .topline{height:30px;display:flex;align-items:center;justify-content:center;gap:4px}
 .sw .col{width:100%;max-width:64px;border-radius:12px 12px 4px 4px;min-height:8px;margin:6px 0;transition:height .7s;align-self:end}
 .sw .sy{font:800 13px var(--body);letter-spacing:.06em}
 .sw .hn{font-size:11px;opacity:.7;overflow:hidden;text-overflow:ellipsis;max-width:100%;white-space:nowrap}
@@ -390,12 +394,13 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
 @keyframes liveDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}
 .live-stage{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:26px;padding:clamp(16px,3vw,32px);backdrop-filter:blur(8px)}
 .live-stage .swaras{height:min(48vh,380px);gap:clamp(6px,1.6vw,18px)}
-.live-stage .sw{position:relative;grid-template-rows:auto auto 1fr auto auto}
+.live-stage .sw{position:relative}
+.live-stage .sw .topline{height:clamp(32px,5.2vw,44px);gap:6px}
 .live-stage .sw .pts{font-size:clamp(18px,3.2vw,32px);color:#fff}
 .live-stage .sw .sy{font-size:clamp(11px,1.7vw,16px);color:#fff}
 .live-stage .sw .hn{font-size:clamp(10px,1.4vw,14px);opacity:.8;color:#fff;white-space:normal}
 .live-stage .sw.lead .col{box-shadow:0 0 0 3px var(--gold),0 0 30px rgba(230,180,90,.5)}
-.live-stage .sw .crown{font-size:clamp(16px,2.6vw,24px);line-height:1.2;margin-bottom:4px}
+.live-stage .sw .crown{font-size:clamp(16px,2.6vw,24px);line-height:1}
 .live-sub{opacity:.72;margin:16px 4px 0;font-size:13.5px}
 .live-feed{margin-top:28px}
 .live-feed h2{color:#fff;font-size:clamp(18px,2.6vw,22px);margin-bottom:12px}
@@ -1149,7 +1154,7 @@ function paintDash(L){
   const wait = S.events.filter(e => !isDone(e.id) && e.canEdit).slice(0, 8);
   L.innerHTML = `<section class="stage"><div class="stage-h"><h2>The seven houses</h2><a href="#live" target="_blank" rel="noopener">Open live screen ↗</a></div>
     <p>House points, in swara order. Updates as results are declared.</p>
-    <div class="swaras">${order.map(x => `<div class="sw"><div class="pts">${x.points}</div><div class="col" style="height:${barPct_(x.points, allPts)}%;background:${hc(x.house)}"></div><div class="sy">${SWARA[x.house][0]}</div><div class="hn">${esc(x.house)}</div></div>`).join('')}</div></section>
+    <div class="swaras">${order.map(x => `<div class="sw"><div class="topline"><div class="pts">${x.points}</div></div><div class="col" style="height:${barPct_(x.points, allPts)}%;background:${hc(x.house)}"></div><div class="sy">${SWARA[x.house][0]}</div><div class="hn">${esc(x.house)}</div></div>`).join('')}</div></section>
     <div class="mini"><span><b>${total - done}</b>events pending</span><span><b>${S.students.length}</b>students on the roster</span></div>
     <section class="panel"><div class="panel-h"><h2>Latest results</h2></div>${latest.length ? latest.map(e => { const r = S.results[e.id];
       return `<div class="feed"><h3>${esc(e.name)}</h3><div class="meta"><span class="medal">1st</span>${esc(r.p1)}${r.p2 ? ' &nbsp;·&nbsp; 2nd ' + esc(r.p2) : ''}${r.p3 ? ' &nbsp;·&nbsp; 3rd ' + esc(r.p3) : ''}</div></div>`; }).join('') : '<div class="empty">No results declared yet.</div>'}</section>
@@ -2133,9 +2138,10 @@ function startLive(){
       const leadPts = Math.max(0, ...order.map(x => x.points));
       $('#liveBars').innerHTML = order.map(x => {
         const lead = x.points > 0 && x.points === leadPts;
-        // Every house gets the SAME crown element (same glyph, same font metrics), so every column
-        // reserves exactly the same vertical space for it — non-leaders just have it invisible.
-        return `<div class="sw${lead ? ' lead' : ''}"><div class="crown"${lead ? '' : ' style="visibility:hidden"'}>\u{1F451}</div><div class="pts">${x.points}</div>
+        // Crown sits beside the number, inside a fixed-height box (see .topline CSS) — not stacked
+        // above it — so no crown can ever spill into or squeeze the number, and a house without a
+        // crown simply has less inside the SAME size box, never a differently sized one.
+        return `<div class="sw${lead ? ' lead' : ''}"><div class="topline">${lead ? '<span class="crown">\u{1F451}</span>' : ''}<div class="pts">${x.points}</div></div>
           <div class="col" style="height:${barPct_(x.points, allPts)}%;background:${hc(x.house)}"></div>
           <div class="sy">${SWARA[x.house][0]}</div><div class="hn">${esc(x.house)}</div></div>`;
       }).join('');
