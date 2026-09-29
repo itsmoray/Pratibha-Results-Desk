@@ -587,7 +587,9 @@ async function api(action, payload = {}, silent){
     // though the script itself already finished successfully server-side. It's not a dropped
     // connection and not something we can fix here, just something to quietly outlast, so a bad
     // reply gets more attempts and a longer wait than a plain network drop.
-    const MAX_ATTEMPTS = 5;
+    // A silent background refresh is never worth hammering Google for: it just tries again on the next tick.
+    const bgPoll = silent && action === 'data' && payload && payload.bg;
+    const MAX_ATTEMPTS = bgPoll ? 2 : 5;
     // One id for this action, reused on every retry: the server remembers the result under it, so a
     // retry after a lost response gets the original answer back instead of doing the work twice.
     const rid = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
@@ -597,7 +599,7 @@ async function api(action, payload = {}, silent){
       badReply = false; timedOut = false;
       // Without a timeout a request Google never answers hangs forever and the page stays stuck
       // until it's reloaded. Give up on the attempt after 45s and retry (safe now, see rid above).
-      const ctl = new AbortController(), killT = setTimeout(() => ctl.abort(), 45000);
+      const ctl = new AbortController(), killT = setTimeout(() => ctl.abort(), bgPoll ? 25000 : 45000);
       try {
         res = await fetch(API_URL, { method:'POST', redirect:'follow', signal: ctl.signal, body: JSON.stringify({ action, token:S.token, rid, ...payload }) });
         raw = await res.text();
@@ -798,7 +800,7 @@ $('#loginForm').addEventListener('submit', async e => {
 let pollT;
 function endSession(msg){
   S.token = ''; S.me = null; S.loaded = false; S.events = []; S.results = {}; S.students = []; S.studentsVer = ''; S.houses = []; S.users = []; S.usersLoaded = false; S.log = []; S.logLoaded = false; S.logErr = '';
-  store.del('prt_token'); store.del('prt_me'); store.del('prt_data'); clearInterval(pollT);
+  store.del('prt_token'); store.del('prt_me'); store.del('prt_data'); clearTimeout(pollT);
   closeDlg(); $('#splash').hidden = true; $('#app').hidden = true; $('#login').hidden = false;
   const er = $('#loginErr'); if (msg){ er.textContent = msg; er.hidden = false; } else er.hidden = true;
 }
@@ -808,10 +810,22 @@ function paintWho(){ $('#who').innerHTML = '<b style="font-size:14px">' + esc(S.
 function showApp(){
   $('#login').hidden = true; $('#app').hidden = false;
   paintWho(); buildTabs(); paintProgress();
-  clearInterval(pollT); pollT = setInterval(poll, POLL_MS);
+  clearTimeout(pollT); schedulePoll(POLL_MS);
 }
-async function poll(){ if (document.hidden || dlg.open || !S.token || !S.loaded) return; try{ await refresh(); }catch(e){} }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+/* Background refresh. Three things keep a busy event day smooth: a refresh never starts while the previous one is
+   still running; each page waits a slightly different time so a hundred phones don't all ask in the same second;
+   and after a failed/slow refresh the page waits longer before asking again, instead of adding to the pile-up. */
+let polling = false, pollFails = 0;
+function schedulePoll(ms){ clearTimeout(pollT); pollT = setTimeout(poll, ms + Math.floor(Math.random() * 4000)); }
+async function poll(){
+  if (!S.token) return;
+  if (document.hidden || dlg.open || !S.loaded || polling){ schedulePoll(POLL_MS); return; }
+  polling = true;
+  try { await refresh(true); pollFails = 0; } catch(e){ pollFails = Math.min(pollFails + 1, 3); }
+  finally { polling = false; }
+  if (S.token) schedulePoll(POLL_MS * (1 + pollFails));
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.token && S.loaded) { clearTimeout(pollT); pollT = setTimeout(poll, 300 + Math.floor(Math.random() * 2500)); } });
 
 async function loadFirst(){
   if (!S.loaded){ paintProgress(); paint(); }
@@ -826,8 +840,8 @@ function showRetry(msg){
 }
 function retry(){ setTab(S.tab || tabsFor()[0][0]); loadFirst(); }
 
-async function refresh(){
-  const j = await api('data', { since: S.loaded ? S.ver : '', sinceStudents: S.loaded ? S.studentsVer : '' }, S.loaded);
+async function refresh(bg){
+  const j = await api('data', { since: S.loaded ? S.ver : '', sinceStudents: S.loaded ? S.studentsVer : '', bg: !!(bg && S.loaded) }, S.loaded);
   if (j.unchanged) return;   // nothing changed on the server: skip the download and the repaint
   const roleChanged = !S.me || S.me.role !== j.me.role;
   // The server omits `students` (usually the biggest part of the payload) when the roster hasn't
