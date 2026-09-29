@@ -497,7 +497,7 @@ dialog::backdrop{background:rgba(29,20,24,.55);backdrop-filter:blur(3px)}
 <script>
 /* ====== CONFIG ====== */
 const API_URL = 'https://script.google.com/macros/s/AKfycbwXZfCpI8nqu6qrWPVbdcbvQsfTmj8de-UhBTm9Wr7nTC-6S7nCoP2Q-Chyui2AcjDM/exec';
-const POLL_MS = 30000;
+const POLL_MS = 60000;
 
 /* ====== STATE + HELPERS ====== */
 const S = { token:'', me:null, events:[], results:{}, students:[], studentsVer:'', houses:[], users:[], log:[], logTotal:0, logLoaded:false, logErr:'', tab:'', filter:'all', stage:'all', q:'', rsort:'chest', sortSoon:false };
@@ -619,7 +619,7 @@ async function api(action, payload = {}, silent){
         // treat it the same as a network hiccup instead of surfacing it as an error.
         if (!j.ok && j.code === 'BUSY' && attempt < MAX_ATTEMPTS - 1){
           if (!silent) $('#loadPillText').textContent = 'Busy, retrying…';
-          await new Promise(r => setTimeout(r, 500 * (attempt + 1) + Math.floor(Math.random() * 300)));
+          await new Promise(r => setTimeout(r, 900 * (attempt + 1) + Math.floor(Math.random() * 700)));
           continue;
         }
         break;
@@ -636,7 +636,7 @@ async function api(action, payload = {}, silent){
         }
         if (attempt < MAX_ATTEMPTS - 1){
           if (!silent) $('#loadPillText').textContent = badReply ? 'Reconnecting…' : 'Working…';
-          await new Promise(r => setTimeout(r, (badReply ? 900 : 600) * (attempt + 1) + Math.floor(Math.random() * 300)));
+          await new Promise(r => setTimeout(r, (badReply ? 1800 : 1200) * (attempt + 1) + Math.floor(Math.random() * 900)));
         }
       }
     }
