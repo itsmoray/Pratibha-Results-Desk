@@ -2121,7 +2121,7 @@ function startLive(){
       const leadPts = Math.max(0, ...order.map(x => x.points));
       $('#liveBars').innerHTML = order.map(x => {
         const lead = x.points > 0 && x.points === leadPts;
-        return `<div class="sw${lead ? ' lead' : ''}">${lead ? '<div class="crown">\u{1F451}</div>' : ''}<div class="pts">${x.points}</div>
+        return `<div class="sw${lead ? ' lead' : ''}"><div class="crown">${lead ? '\u{1F451}' : ''}</div><div class="pts">${x.points}</div>
           <div class="col" style="height:${Math.max(4, Math.round(x.points / top * 100))}%;background:${hc(x.house)}"></div>
           <div class="sy">${SWARA[x.house][0]}</div><div class="hn">${esc(x.house)}</div></div>`;
       }).join('');
