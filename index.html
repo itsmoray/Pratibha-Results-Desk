@@ -2180,7 +2180,7 @@ function startLive(){
       $('#liveSub').textContent = j.declared + ' of ' + j.total + ' events declared \u00b7 updated ' + new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
     } catch(e){}
   };
-  go(); setInterval(() => { if (!document.hidden) go(); }, 15000);
+  go(); setInterval(() => { if (!document.hidden) go(); }, 30000 + Math.floor(Math.random() * 5000));   // every ~30s (was 15s) so a crowd watching the big screen puts half the load on the server
 }
 (function(){
   if (location.hash === '#live'){ startLive(); return; }
