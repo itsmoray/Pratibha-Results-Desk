@@ -568,7 +568,7 @@ let pending = 0;
 const LOAD_LABELS = {
   addStudent:'Saving student…', bulkAddStudents:'Adding students…', updateStudent:'Saving changes…', deleteStudent:'Removing student…', clearStudents:'Clearing the roster…',
   linkStudent:'Linking chest numbers…', unlinkStudent:'Unlinking…', studentReport:'Loading report…',
-  saveMarks:'Saving marks…', lockSubmission:'Submitting marks…', unlockSubmission:'Unlocking…', declareFromMarks:'Declaring result…',
+  saveMarks:'Saving marks…', lockSubmission:'Submitting marks…', unlockSubmission:'Unlocking…', declareFromMarks:'Declaring result…', declareWithTies:'Declaring result…',
   saveResult:'Saving result…', addEvent:'Adding event…', addEvents:'Adding events…', updateEvent:'Saving event…', deleteEvent:'Removing event…',
   setCriteria:'Saving criteria…', importOfficialEvents:'Importing events…', importSchedule:'Loading schedule…', changePassword:'Updating password…',
   addUser:'Saving account…', updateUser:'Saving account…', deleteUser:'Removing account…'
@@ -680,7 +680,7 @@ const ACT = { login:'Signed in', loginFailed:'Failed sign-in', logout:'Signed ou
   deleteStudent:'Deleted student', clearStudents:'Cleared the roster', linkStudent:'Linked chest numbers', unlinkStudent:'Unlinked chest numbers',
   addEntry:'Added participant', removeEntry:'Removed participant',
   saveMarks:'Saved marks', lockSubmission:'Submitted marks', unlockSubmission:'Unlocked marks',
-  declareFromMarks:'Declared result from marks', certStatus:'Certificate status', importOfficialEvents:'Loaded official event list',
+  declareFromMarks:'Declared result from marks', declareWithTies:'Declared result from marks (with ties)', certStatus:'Certificate status', importOfficialEvents:'Loaded official event list',
   bulkSetMaxMark:'Set max mark for all events', importSchedule:'Loaded venue & time schedule' };
 const ACT_BAD = ['loginFailed', 'deleteUser', 'deleteEvent'];
 const actLabel = a => ACT[a] || a;
@@ -847,7 +847,7 @@ async function refresh(bg){
   // The server omits `students` (usually the biggest part of the payload) when the roster hasn't
   // changed since our last studentsVer, so keep what we already have in that case.
   if (j.students) S.students = j.students;
-  S.events = j.events; S.results = j.results; S.houses = j.houses || []; S.champs = j.champs || {}; S.certs = j.certs || {}; S.batches = j.batches || []; S.ver = j.ver || ''; S.studentsVer = j.studentsVer || S.studentsVer; S.loaded = true; S.me = j.me;
+  S.hideDet = !!j.hideDetails; S.events = j.events; S.results = j.results; S.houses = j.houses || []; S.champs = j.champs || {}; S.certs = j.certs || {}; S.batches = j.batches || []; S.ver = j.ver || ''; S.studentsVer = j.studentsVer || S.studentsVer; S.loaded = true; S.me = j.me;
   store.set('prt_me', JSON.stringify(j.me));
   store.set('prt_data', JSON.stringify({ events:j.events, results:j.results, students:S.students, houses:j.houses, champs:j.champs, certs:j.certs, batches:j.batches, ver:j.ver, studentsVer:S.studentsVer }));
   paintWho();
@@ -933,7 +933,7 @@ async function setTab(k){
   } else if (k === 'house'){
     v.innerHTML = `<p class="meta" style="margin-bottom:12px">Updates automatically as results are declared. <a href="#live" target="_blank" rel="noopener">Open the big-screen live view</a> (needs no login).</p><div id="list"></div>`;
   } else if (k === 'roster'){
-    v.innerHTML = `${oneStudentForm()}<details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Add many students at once</summary>
+    v.innerHTML = `<div class="item" id="hideDetBox" style="margin-bottom:14px"></div>${oneStudentForm()}<details class="item" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">Add many students at once</summary>
       <p class="meta">One student per line: Chest number | Name | Class | House | Gender (M or F) | Stage (On-stage, Off-stage or Both). Leave House empty if Class is typed exactly as in the batch list: the house fills in by itself. Stage can be left blank too.</p><details style="margin-bottom:8px"><summary class="meta" style="cursor:pointer">Show class names</summary><p class="meta">${S.batches.map(b => esc(b.label)).join(' · ')}</p></details>
       <textarea id="bulkStu" rows="5" placeholder="101 | Anjali Menon | S5 BCA | Shadjam | F | Off-stage"></textarea>
       <div class="actions"><button type="button" class="btn ghost" id="addStuBtn" onclick="addStudentsBulk()">Add students</button></div></details>
@@ -946,7 +946,7 @@ async function setTab(k){
       </select>
       <div class="chips">${['all','on','off','both'].map(f => `<button class="chip" data-f="${f}" aria-pressed="${f==='all'}" onclick="setFilter('${f}')">${{all:'All',on:'On-stage',off:'Off-stage',both:'Both'}[f]}</button>`).join('')}</div></div>
       <div id="list" class="list"></div>`;
-    wireOneStudent();
+    wireOneStudent(); paintHideDet();
   } else if (k === 'board'){
     const canX = role() === 'admin' || role() === 'viewer' || role() === 'master';
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search declared results" oninput="S.q=this.value;paint()">
@@ -1057,6 +1057,7 @@ function paint(){
   else if (S.tab === 'roster'){
     const q = S.q.trim().toLowerCase();
     const stageMap = { on:'On-stage', off:'Off-stage', both:'Both' };
+    paintHideDet();
     let list = S.students.filter(s => !q || (s.chest + ' ' + s.name + ' ' + s.cls + ' ' + s.house).toLowerCase().includes(q));
     if (S.filter !== 'all') list = list.filter(s => s.stage === stageMap[S.filter]);
     const sortKey = { chest:'chest', name:'name', house:'house', cls:'cls' }[S.rsort] || 'chest';
@@ -1402,6 +1403,20 @@ async function exportStudentReport(){
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Achievements');
   XLSX.writeFile(wb, (s.name || 'student').replace(/[^\w]+/g, '_') + '_achievements.xlsx');
 }
+/* Master/admin switch: hide (or show) name, class and house on EVERY judge's marking screen, for all events.
+   Chest numbers stay visible; reports, results and the review/declare screens always show everything. */
+function paintHideDet(){
+  const b = $('#hideDetBox'); if (!b) return;
+  b.innerHTML = `<b>Judges' marking screens</b>
+    <p class="meta" style="margin:4px 0 8px">Student details (name, class, house) are currently <b>${S.hideDet ? 'HIDDEN' : 'SHOWN'}</b> to judges in all events${S.hideDet ? ' — they see the chest number only' : ''}. Reports and results always show full details.</p>
+    <button type="button" class="btn ${S.hideDet ? 'gold' : 'ghost'}" id="hideDetBtn" onclick="toggleHideDet()">${S.hideDet ? 'Show name, class & house to judges' : 'Hide name, class & house from judges'}</button>`;
+}
+async function toggleHideDet(){
+  const btn = $('#hideDetBtn'); if (btn) btn.disabled = true;
+  try { const j = await api('setJudgeDetails', { hide: !S.hideDet }); S.hideDet = !!j.hideDetails; toast(S.hideDet ? 'Details hidden from all judges' : 'Details shown to all judges'); }
+  catch(e){ toast(e.message, true); }
+  paintHideDet();
+}
 const HOUSES_UI = ['Shadjam','Rishabham','Gandharam','Madhyamam','Panchamam','Dhaivatam','Nishadam'];
 const STAGES_UI = ['On-stage','Off-stage','Both'];
 const stageCls = s => s === 'On-stage' ? 'on' : s === 'Off-stage' ? 'off' : s === 'Both' ? 'grp' : '';
@@ -1435,17 +1450,28 @@ function renderJudging(j){
   const judgeHeads = j.judges.map(jg => `<th>${esc(jg.name)}${jg.locked ? ((role() === 'admin' || role() === 'master') ? `<br><button type="button" class="btn ghost small" onclick="unlockJudge('${ev.id}','${esc(jg.email)}')">Unlock</button>` : '') : ' <small>(entering)</small>'}</th>`).join('');
   const body = j.entries.length ? `<div style="overflow-x:auto"><table class="scoreTbl"><thead><tr><th>Participant</th>${judgeHeads}<th>Average</th><th>Rank</th></tr></thead><tbody>${rows}</tbody></table></div>`
     : '<div class="empty">No participants scored yet.</div>';
+  // A tie inside the top 3 (same test the server uses). Only then, and only for master/admin, the extra button appears.
+  const rk = j.entries.filter(r => r.avg !== null);
+  const canTie = (role() === 'admin' || role() === 'master') && rk.some((r, i) => i < 3 && rk[i + 1] && r.rank === rk[i + 1].rank);
   const noJudges = !j.judges.length ? '<p class="err">No judges are assigned to this event yet — add a judge account under Accounts.</p>' : '';
   openDlg(`<h2>${esc(ev.name)}</h2><p class="sub">${plural(j.judges.length,'judge')} · worth ${ev.ptsFirst}/${ev.ptsSecond}/${ev.ptsThird} house points for 1st/2nd/3rd${crit.length ? ' · ' + plural(crit.length,'criterion') : ''}</p>
   ${noJudges}${overBanner}${body}
   <div class="actions"><button type="button" class="btn ghost" onclick="closeDlg()">Close</button>
   <button type="button" class="btn ghost" onclick="printSheet()">Score sheet (PDF)</button>
   <button type="button" class="btn ghost" onclick="openEditor('${ev.id}')">Enter manually instead</button>
-  <button type="button" class="btn gold" id="declBtn" ${j.entries.filter(r=>r.avg!==null).length ? '' : 'disabled'}>Declare top 3</button></div>`);
+  <button type="button" class="btn gold" id="declBtn" ${j.entries.filter(r=>r.avg!==null).length ? '' : 'disabled'}>Declare top 3</button>
+  ${canTie ? '<button type="button" class="btn gold" id="declTieBtn">Declare with ties</button>' : ''}</div>`);
   $('#declBtn').onclick = async () => {
     const b = $('#declBtn'); b.disabled = true; b.textContent = 'Declaring…';
     try { await api('declareFromMarks', { eventId: ev.id }); closeDlg(); celebrate('Result declared'); await refresh(); }
     catch(e){ toast(e.message, true); b.disabled = false; b.textContent = 'Declare top 3'; }
+  };
+  const tb = $('#declTieBtn');
+  if (tb) tb.onclick = async () => {
+    if (!await confirmBox('Declare with ties?', 'Students on the same average will share the place (up to 2 per place) and each gets that place\'s full points. Continue?', 'Declare with ties')) return;
+    tb.disabled = true; tb.textContent = 'Declaring…';
+    try { await api('declareWithTies', { eventId: ev.id }); closeDlg(); celebrate('Result declared'); await refresh(); }
+    catch(e){ toast(e.message, true); tb.disabled = false; tb.textContent = 'Declare with ties'; }
   };
 }
 
@@ -1968,8 +1994,8 @@ function printSheet(){
 const PLACES = [['1st','p1','c1','x1','\u{1F947}'],['2nd','p2','c2','x2','\u{1F948}'],['3rd','p3','c3','x3','\u{1F949}'],['Runner-up','p4','c4','x4','\u{1F396}\uFE0F']];
 function resultWinners(r){
   return PLACES.filter(x => r[x[1]]).map(x => {
-    const s = studentBy(r[x[3]]);
-    return { place:x[0], medal:x[4], name:r[x[1]], cls:r[x[2]] || (s ? s.cls : ''), house: s ? s.house : '' };
+    const ss = String(r[x[3]] || '').split(',').map(c => studentBy(c.trim())).filter(Boolean);   // more than one chest number = a declared tie
+    return { place:x[0], medal:x[4], name:r[x[1]], cls:r[x[2]] || ss.map(s => s.cls).join(' & '), house:[...new Set(ss.map(s => s.house).filter(Boolean))].join(' & ') };
   });
 }
 function resultCaption(e, r){
