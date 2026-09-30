@@ -717,16 +717,16 @@ function mergeStudents_(students){
     if (idx > -1) S.students[idx] = s; else S.students.push(s);
   });
 }
-const studentsDL = () => '<datalist id="studentsDL">' + S.students.map(s => `<option value="${esc(s.chest)}">${esc(s.name)}</option>`).join('') + '</datalist>';
-function lookupLine(chest){
+const studentsDL = hide => '<datalist id="studentsDL">' + S.students.map(s => hide ? `<option value="${esc(s.chest)}"></option>` : `<option value="${esc(s.chest)}">${esc(s.name)}</option>`).join('') + '</datalist>';
+function lookupLine(chest, hide){
   const c = String(chest || '').trim();
   if (!c) return '';
   const s = studentBy(c);
-  return s ? `<div class="lookup ok">${esc(s.name)} — ${esc([s.cls, s.house].filter(Boolean).join(', '))}</div>`
+  return s ? (hide ? `<div class="lookup ok">Chest #${esc(c)}</div>` : `<div class="lookup ok">${esc(s.name)} — ${esc([s.cls, s.house].filter(Boolean).join(', '))}</div>`)
             : `<div class="lookup bad">No student with chest number "${esc(c)}" on the roster.</div>`;
 }
-function wireLookup(inputEl, lineEl){
-  inputEl.addEventListener('input', () => { lineEl.innerHTML = lookupLine(inputEl.value); });
+function wireLookup(inputEl, lineEl, hide){
+  inputEl.addEventListener('input', () => { lineEl.innerHTML = lookupLine(inputEl.value, hide); });
 }
 const dlg = $('#dlg');
 // A native <dialog> shown with showModal() renders in the browser's "top layer", above every
@@ -1410,6 +1410,9 @@ const stageCls = s => s === 'On-stage' ? 'on' : s === 'Off-stage' ? 'off' : s ==
 const whoCell = r => r.missing
   ? `<span class="errTxt">Chest #${esc(r.chest)}</span><small>not on the roster — safe to remove</small>`
   : `${esc(r.name)} <span class="pill wait">#${esc(r.chest)}</span><small>${esc([r.cls, r.house].filter(Boolean).join(', '))}</small>`;
+const whoCellJudge = (r, hide) => (hide && !r.missing)
+  ? `<span class="pill wait">#${esc(r.chest)}</span>`
+  : whoCell(r);
 async function openJudging(id){
   openDlg(`<h2>Loading…</h2><div class="sk-l w60"></div><div class="sk-l w40"></div>`);
   let j;
@@ -1463,6 +1466,7 @@ async function openScoring(id){
 }
 function renderScoring(j, draft){
   const ev = j.event, crit = j.criteria, cols = crit.length ? crit : [{ id:'_', name:'Overall mark', max:ev.maxMark }];
+  const hideDet = !!j.hideDetails;   // master has hidden name/class/house on this marking screen
   const draftKey = 'draft_' + ev.id + '_' + (S.me ? S.me.email : '');
   let restored = false;
   if (!draft){
@@ -1474,7 +1478,7 @@ function renderScoring(j, draft){
   const rows = j.entries.map(r => {
     const mc = r.mineCrit || {};
     const abs = !!r.absent;
-    return `<div class="mrow${abs ? ' absent' : ''}" data-chest="${esc(r.chest)}"><div class="mwho">${whoCell(r)}</div>
+    return `<div class="mrow${abs ? ' absent' : ''}" data-chest="${esc(r.chest)}"><div class="mwho">${whoCellJudge(r, hideDet)}</div>
       <div class="mtot"><b>${abs ? 'Absent' : '—'}</b><small>of ${maxTotal}</small></div>
       ${abs
         ? `<p class="mabsentNote">Marked absent${r.absentBy ? ' by ' + esc(r.absentBy) : ''}${r.absentAt ? ' · ' + esc(fmtTime(r.absentAt)) : ''} — no marks are entered for this student.</p>`
@@ -1487,6 +1491,7 @@ function renderScoring(j, draft){
   }).join('');
   openDlg(`<h2>${esc(ev.name)}</h2>
   <div class="mhead"><span>${crit.length ? plural(crit.length, 'criterion') : 'One overall mark'}</span><span>${maxTotal} marks per student</span></div>
+  ${(role() === 'master' || role() === 'admin') ? `<div class="fld"><span>Student details on judges' screens: <b>${hideDet ? 'Hidden (chest number only)' : 'Shown'}</b></span><button type="button" class="btn ghost small" id="detToggle" style="margin-top:6px">${hideDet ? 'Show name, class &amp; house' : 'Hide name, class &amp; house'}</button></div>` : ''}
   <div class="mprog"><div class="mpb"><i id="mpi"></i></div><span class="hint" id="cnt" style="margin:0"></span></div>
   ${me.locked ? '<p class="err">You have submitted your marks for this event. Ask an admin to unlock them if you need to change something.</p>' : ''}
   ${me.locked ? '' : `<div class="fld"><span>Add students by chest number</span><input id="addChest" inputmode="numeric" placeholder="Scan or type, then Enter. Several numbers are fine (space or comma between)" list="studentsDL" autocomplete="off">
@@ -1495,7 +1500,7 @@ function renderScoring(j, draft){
     <div id="bulkBox" hidden style="margin-top:8px">
       <textarea id="addChestsBulk" rows="4" placeholder="Paste chest numbers here — one per line, or separated by spaces/commas"></textarea>
       <button type="button" class="btn ghost small" id="bulkAddBtn" style="margin-top:8px">Add all</button>
-    </div></div>${studentsDL()}`}
+    </div></div>${studentsDL(hideDet)}`}
   <div class="mlist" id="mtbl">${rows || '<p class="hint">No students yet. Scan or type their chest numbers above.</p>'}</div>
   <div class="mbar"><span class="hint" id="saveState"></span><button type="button" class="btn ghost" onclick="closeDlg()">Close</button>
   ${me.locked ? '' : `<button type="button" class="btn ghost" id="saveBtn">Save marks</button><button type="button" class="btn gold" id="lockBtn">Submit final marks</button>`}</div>`);
@@ -1606,7 +1611,7 @@ function renderScoring(j, draft){
     }
   };
   if (addBox){
-    wireLookup(addBox, addLine);
+    wireLookup(addBox, addLine, hideDet);
     addBox.addEventListener('keydown', async e => {
       if (e.key !== 'Enter' || addBusy) return; e.preventDefault();
       const chests = addBox.value.split(/[\s,;]+/).filter(Boolean); if (!chests.length) return;
@@ -1633,6 +1638,15 @@ function renderScoring(j, draft){
       catch(err){ /* keep what they pasted so they can fix and retry */ }
     };
   }
+  const dt = $('#detToggle');
+  if (dt) dt.onclick = async () => {
+    dt.disabled = true;
+    try {
+      const d = draftNow();
+      await api('setJudgeDetails', { hide: !hideDet });
+      renderScoring(await api('judging', { eventId: ev.id, as:'judge' }), d);
+    } catch(e){ toast(e.message, true); dt.disabled = false; }
+  };
   const sb = $('#saveBtn');
   if (sb) sb.onclick = async () => { sb.disabled = true; try { if (!collect().length) toast('Enter a mark first', true); else { await saveAll(); celebrate('Marks saved'); } } catch(e){ toast(e.message, true); } sb.disabled = false; };
   const lb = $('#lockBtn');
