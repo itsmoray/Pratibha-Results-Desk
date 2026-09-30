@@ -310,6 +310,14 @@ button.item:hover{border-color:var(--gold)}
 .medal{display:inline-block;margin-right:6px;padding:2px 7px;border-radius:6px;background:var(--gold-soft);color:#8A5B00;font-size:11px;font-weight:800}
 .cat{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:6px}
 .cat.on{background:#F4E3E8;color:var(--maroon)}.cat.off{background:var(--teal-soft);color:var(--teal)}.cat.grp{background:var(--gold-soft);color:#8A5B00}
+/* event card alignment: keep every card inside its grid cell, category tag on one line, long status/title text wraps */
+.ecard{min-width:0;max-width:100%;box-sizing:border-box;overflow:hidden}
+.ecard-top{flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:6px 8px;min-width:0}
+.ecard-top .cat{white-space:nowrap;flex:none}
+.ecard-top .pill{flex:0 1 auto;min-width:0;max-width:100%;white-space:normal;line-height:1.25;text-align:center}
+.ecard h3{min-width:0;overflow-wrap:anywhere}
+.ecard-meta{min-width:0}
+
 .stage{background:linear-gradient(170deg,var(--maroon),var(--maroon2));color:#fff;border-radius:22px;padding:22px 24px 18px;margin-bottom:16px;box-shadow:var(--sh)}
 .stage-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:6px}
 .stage-h h2{font-size:22px;color:#fff}.stage-h a{color:var(--gold);font-size:13px;font-weight:800;text-decoration:none}
