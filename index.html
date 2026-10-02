@@ -2182,15 +2182,24 @@ function loadXlsx(){
     document.head.appendChild(s);
   });
 }
-/* One Excel file with the score sheet of EVERY event (admin/master): a Summary sheet plus one sheet per event with
-   the entries, each judge's total, the average, the rank and the declared result. Read-only: nothing is changed. */
+/* One Excel file with the score sheet of every DECLARED event (admin/master): a Summary sheet plus one formatted sheet
+   per event (entries, each judge's total, average, rank, declared result). Read-only: nothing is changed. */
+function loadExcelJs(){
+  if (window.ExcelJS) return Promise.resolve();
+  return new Promise((ok, no) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+    s.onload = ok; s.onerror = () => no(new Error('Could not load the Excel styling library'));
+    document.head.appendChild(s);
+  });
+}
 async function exportAllScoreSheets(){
   const btn = $('#allSheetsBtn'), label = btn ? btn.textContent : '';
   const say = t => { if (btn) btn.textContent = t; };
   if (btn) btn.disabled = true;
   try {
-    await loadXlsx();
-    const evs = S.events.slice(), got = [], fails = [];
+    const evs = S.events.filter(e => isDone(e.id)), got = [], fails = [];   // declared events only
+    if (!evs.length) throw new Error('No declared events yet');
     let next = 0, done = 0;
     const worker = async () => {
       while (next < evs.length){
@@ -2202,38 +2211,101 @@ async function exportAllScoreSheets(){
     };
     await Promise.all([worker(), worker(), worker()]);   // 3 at a time keeps the server comfortable
     got.sort((a, b) => evs.indexOf(a.e) - evs.indexOf(b.e));
-    const wb = XLSX.utils.book_new(), used = {};
-    const sheetName = n => {
+    const used = { summary: 1 };
+    const uniq = n => {
       let b = String(n || 'Event').replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 28) || 'Event', s = b, i = 2;
       while (used[s.toLowerCase()]) s = b.slice(0, 26) + ' ' + i++;
       used[s.toLowerCase()] = 1; return s;
     };
-    used['summary'] = 1;
-    const summary = got.map(({ e, j }) => {
-      const r = S.results[e.id] || {};
-      return { 'Event':e.name, 'Category':e.category, 'Venue':e.venue, 'Judges':j.judges.length, 'Entries':j.entries.length,
-        'Declared':r.p1 || r.p2 || r.p3 ? 'Yes' : 'No', '1st':r.p1||'', '2nd':r.p2||'', '3rd':r.p3||'', 'Runner-up':r.p4||'' };
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), 'Summary');
-    got.forEach(({ e, j }) => {
+    const summary = [['Event', 'Category', 'Venue', 'Judges', 'Entries', '1st', '2nd', '3rd', 'Runner-up']];
+    const sheets = got.map(({ e, j }) => {
       const r = S.results[e.id] || {}, cr = j.criteria;
-      const aoa = [['Pratibha 2026-27 · ' + e.name], [[e.category, e.venue].filter(Boolean).join(', ')],
-        [cr.length ? 'Criteria: ' + cr.map(c => c.name + ' /' + c.max).join(', ') : 'Overall mark out of ' + j.event.maxMark], [],
-        ['Rank', 'Chest', 'Name', 'Class', 'House', ...j.judges.map(g => g.name), 'Average']];
-      j.entries.forEach(row => aoa.push([row.rank ?? '', row.chest, row.name, row.cls, row.house,
-        ...j.judges.map(g => row.absent ? 'Absent' : (row.perJudge[g.email] ?? '')), row.absent ? 'Absent' : (row.avg ?? '')]));
-      if (!j.entries.length) aoa.push(['No participants entered.']);
-      aoa.push([], ['Declared result']);
-      const places = [['1st','p1','c1'], ['2nd','p2','c2'], ['3rd','p3','c3'], ['Runner-up','p4','c4']].filter(x => r[x[1]]);
-      if (places.length) places.forEach(x => aoa.push([x[0], r[x[1]], r[x[2]] || ''])); else aoa.push(['Not declared yet']);
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [{ wch:7 }, { wch:10 }, { wch:28 }, { wch:20 }, { wch:12 }, ...j.judges.map(() => ({ wch:16 })), { wch:10 }];
-      XLSX.utils.book_append_sheet(wb, ws, sheetName(e.name));
+      summary.push([e.name, e.category || '', e.venue || '', j.judges.length, j.entries.length, r.p1 || '', r.p2 || '', r.p3 || '', r.p4 || '']);
+      return { name: uniq(e.name), title: 'Pratibha 2026-27 · ' + e.name, sub: [e.category, e.venue].filter(Boolean).join(', '),
+        crit: cr.length ? 'Criteria: ' + cr.map(c => c.name + ' /' + c.max).join(', ') : 'Overall mark out of ' + j.event.maxMark,
+        head: ['Rank', 'Chest', 'Name', 'Class', 'House', ...j.judges.map(g => g.name), 'Average'],
+        rows: j.entries.map(x => ({ rank: x.rank, absent: !!x.absent,
+          vals: [x.rank ?? '', x.chest, x.name, x.cls || '', x.house || '', ...j.judges.map(g => x.absent ? 'Absent' : (x.perJudge[g.email] ?? '')), x.absent ? 'Absent' : (x.avg ?? '')] })),
+        places: [['1st','p1','c1'], ['2nd','p2','c2'], ['3rd','p3','c3'], ['Runner-up','p4','c4']].filter(x => r[x[1]]).map(x => [x[0], r[x[1]], r[x[2]] || '']) };
     });
-    XLSX.writeFile(wb, 'Pratibha_All_Score_Sheets.xlsx');
+    let styled = true;
+    try { await loadExcelJs(); } catch(err){ styled = false; }
+    if (styled) await writeStyledSheets(summary, sheets); else await writePlainSheets(summary, sheets);
     toast(fails.length ? 'Downloaded, but these events could not be read: ' + fails.join(', ') : 'All score sheets downloaded', !!fails.length);
   } catch(err){ toast(err.message, true); }
   if (btn){ btn.disabled = false; btn.textContent = label; }
+}
+async function writeStyledSheets(summary, sheets){
+  const wb = new ExcelJS.Workbook(); wb.creator = 'Pratibha Results Desk';
+  const fill = c => ({ type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + c } });
+  const side = { style:'thin', color:{ argb:'FFD9C9B8' } }, box = { top:side, left:side, bottom:side, right:side };
+  const MAROON = '6B1A2B', head = c => { c.fill = fill(MAROON); c.font = { bold:true, color:{ argb:'FFFFFFFF' } }; c.alignment = { horizontal:'center', vertical:'middle', wrapText:true }; c.border = box; };
+  const wid = (rows, i, min, max) => Math.max(min, Math.min(max, ...rows.map(r => String(r[i] ?? '').length + 3)));
+  // Summary
+  const sw = wb.addWorksheet('Summary', { views:[{ state:'frozen', ySplit:1, showGridLines:false }], pageSetup:{ orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0 } });
+  summary.forEach((r, i) => {
+    const row = sw.addRow(r); row.height = i ? 20 : 26;
+    row.eachCell({ includeEmpty:true }, (c, col) => {
+      if (!i) return head(c);
+      c.fill = fill(i % 2 ? 'FFFFFF' : 'FBF6F1'); c.border = box;
+      c.alignment = { vertical:'middle', horizontal: col === 4 || col === 5 ? 'center' : 'left' };
+    });
+  });
+  sw.columns = summary[0].map((_, i) => ({ width: wid(summary, i, 10, 42) }));
+  sw.autoFilter = { from:{ row:1, column:1 }, to:{ row:1, column:summary[0].length } };
+  // One sheet per event
+  sheets.forEach(s => {
+    const n = s.head.length;
+    const ws = wb.addWorksheet(s.name, { views:[{ state:'frozen', ySplit:5, showGridLines:false }], pageSetup:{ orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0 } });
+    const line = (text, font, height) => { const r = ws.addRow([text]); ws.mergeCells(r.number, 1, r.number, n); const c = ws.getCell(r.number, 1);
+      c.font = font; c.alignment = { vertical:'middle', wrapText:true }; if (height) r.height = height; return r; };
+    line(s.title, { bold:true, size:16, color:{ argb:'FF' + MAROON } }, 30);
+    line(s.sub, { color:{ argb:'FF6B6B6B' } }, 18);
+    line(s.crit, { italic:true, color:{ argb:'FF6B6B6B' } }, s.crit.length > 90 ? 32 : 18);
+    ws.addRow([]);
+    const hr = ws.addRow(s.head); hr.height = 26; hr.eachCell(head);
+    s.rows.forEach((x, i) => {
+      const row = ws.addRow(x.vals), bg = x.rank === 1 ? 'FBE9B7' : x.rank === 2 ? 'E6EAF1' : x.rank === 3 ? 'F2DEC8' : (i % 2 ? 'FBF6F1' : 'FFFFFF');
+      row.height = 20;
+      row.eachCell({ includeEmpty:true }, (c, col) => {
+        if (col > n) return;
+        c.fill = fill(bg); c.border = box;
+        c.alignment = { vertical:'middle', horizontal: col >= 3 && col <= 5 ? 'left' : 'center' };
+        if (x.absent) c.font = { italic:true, color:{ argb:'FF8A8A8A' } };
+      });
+      const av = ws.getCell(row.number, n); av.font = { bold:true, color:{ argb: x.absent ? 'FF8A8A8A' : 'FF000000' } }; if (!x.absent) av.numFmt = '0.00';
+      if (x.rank >= 1 && x.rank <= 3) ws.getCell(row.number, 1).font = { bold:true };
+    });
+    ws.addRow([]);
+    const t = ws.addRow(['Declared result']); ws.mergeCells(t.number, 1, t.number, n);
+    const tc = ws.getCell(t.number, 1); tc.fill = fill('F3D58A'); tc.font = { bold:true, size:12, color:{ argb:'FF4A3200' } }; tc.alignment = { vertical:'middle' }; t.height = 24;
+    const place = (vals, isHead, bg) => {
+      const r = ws.addRow([vals[0], '', vals[1], vals[2], '']); r.height = isHead ? 22 : 20;
+      ws.mergeCells(r.number, 1, r.number, 2); ws.mergeCells(r.number, 4, r.number, 5);
+      [1, 3, 4].forEach(col => { const c = ws.getCell(r.number, col);
+        if (isHead) head(c); else { c.fill = fill(bg); c.alignment = { vertical:'middle', horizontal: col === 1 ? 'center' : 'left' }; if (col === 1) c.font = { bold:true }; }
+        c.border = box; });
+      [2, 5].forEach(col => { ws.getCell(r.number, col).border = box; if (!isHead) ws.getCell(r.number, col).fill = fill(bg); else ws.getCell(r.number, col).fill = fill(MAROON); });
+    };
+    if (s.places.length){ place(['Place', 'Winner', 'Class'], true); s.places.forEach((p, i) => place(p, false, ['FBE9B7', 'E6EAF1', 'F2DEC8', 'FBF6F1'][i])); }
+    else { const r = ws.addRow(['Not declared yet']); r.getCell(1).font = { italic:true, color:{ argb:'FF6B6B6B' } }; }
+    const allRows = [s.head, ...s.rows.map(x => x.vals)];
+    ws.columns = s.head.map((_, i) => ({ width: i === 0 ? 8 : i === 1 ? 11 : i === 2 ? wid(allRows, i, 18, 38) : i === 3 ? wid(allRows, i, 16, 34) : i === 4 ? wid(allRows, i, 12, 18) : i === n - 1 ? 11 : 15 }));
+  });
+  const buf = await wb.xlsx.writeBuffer();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  a.download = 'Pratibha_All_Score_Sheets.xlsx'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+/* Fallback if the styling library cannot load (e.g. weak internet): same data, plain formatting. */
+async function writePlainSheets(summary, sheets){
+  await loadXlsx();
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), 'Summary');
+  sheets.forEach(s => {
+    const aoa = [[s.title], [s.sub], [s.crit], [], s.head, ...s.rows.map(x => x.vals), [], ['Declared result'], ...(s.places.length ? s.places : [['Not declared yet']])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), s.name);
+  });
+  XLSX.writeFile(wb, 'Pratibha_All_Score_Sheets.xlsx');
 }
 async function exportXlsx(){
   try { await loadXlsx(); } catch(e){ return toast(e.message, true); }
