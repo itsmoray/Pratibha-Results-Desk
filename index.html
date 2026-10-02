@@ -972,7 +972,8 @@ async function setTab(k){
   } else if (k === 'board'){
     const canX = role() === 'admin' || role() === 'viewer' || role() === 'master';
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search declared results" oninput="S.q=this.value;paint()">
-      ${canX ? '<button class="btn gold" onclick="exportXlsx()">Download Excel</button>' : ''}</div><div id="list" class="list"></div><p class="waiting" id="waiting"></p>`;
+      ${canX ? '<button class="btn gold" onclick="exportXlsx()">Download Excel</button>' : ''}
+      ${(role() === 'admin' || role() === 'master') ? '<button class="btn ghost" id="allSheetsBtn" onclick="exportAllScoreSheets()">Download all score sheets</button>' : ''}</div><div id="list" class="list"></div><p class="waiting" id="waiting"></p>`;
   } else if (k === 'certs'){
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search event or winner" oninput="S.q=this.value;paint()">
       <div class="chips">${['all','on','off'].map(f => `<button class="chip" data-sf="${f}" aria-pressed="${f==='all'}" onclick="setStage('${f}')">${{all:'All stages',on:'On-stage',off:'Off-stage'}[f]}</button>`).join('')}</div>
@@ -2180,6 +2181,59 @@ function loadXlsx(){
     s.onload = ok; s.onerror = () => no(new Error('Could not load the Excel library. Check your internet.'));
     document.head.appendChild(s);
   });
+}
+/* One Excel file with the score sheet of EVERY event (admin/master): a Summary sheet plus one sheet per event with
+   the entries, each judge's total, the average, the rank and the declared result. Read-only: nothing is changed. */
+async function exportAllScoreSheets(){
+  const btn = $('#allSheetsBtn'), label = btn ? btn.textContent : '';
+  const say = t => { if (btn) btn.textContent = t; };
+  if (btn) btn.disabled = true;
+  try {
+    await loadXlsx();
+    const evs = S.events.slice(), got = [], fails = [];
+    let next = 0, done = 0;
+    const worker = async () => {
+      while (next < evs.length){
+        const e = evs[next++];
+        try { got.push({ e, j: await api('judging', { eventId: e.id }, true) }); }
+        catch(err){ try { got.push({ e, j: await api('judging', { eventId: e.id }, true) }); } catch(err2){ fails.push(e.name); } }   // one retry
+        say('Preparing… ' + (++done) + ' / ' + evs.length);
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);   // 3 at a time keeps the server comfortable
+    got.sort((a, b) => evs.indexOf(a.e) - evs.indexOf(b.e));
+    const wb = XLSX.utils.book_new(), used = {};
+    const sheetName = n => {
+      let b = String(n || 'Event').replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 28) || 'Event', s = b, i = 2;
+      while (used[s.toLowerCase()]) s = b.slice(0, 26) + ' ' + i++;
+      used[s.toLowerCase()] = 1; return s;
+    };
+    used['summary'] = 1;
+    const summary = got.map(({ e, j }) => {
+      const r = S.results[e.id] || {};
+      return { 'Event':e.name, 'Category':e.category, 'Venue':e.venue, 'Judges':j.judges.length, 'Entries':j.entries.length,
+        'Declared':r.p1 || r.p2 || r.p3 ? 'Yes' : 'No', '1st':r.p1||'', '2nd':r.p2||'', '3rd':r.p3||'', 'Runner-up':r.p4||'' };
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), 'Summary');
+    got.forEach(({ e, j }) => {
+      const r = S.results[e.id] || {}, cr = j.criteria;
+      const aoa = [['Pratibha 2026-27 · ' + e.name], [[e.category, e.venue].filter(Boolean).join(', ')],
+        [cr.length ? 'Criteria: ' + cr.map(c => c.name + ' /' + c.max).join(', ') : 'Overall mark out of ' + j.event.maxMark], [],
+        ['Rank', 'Chest', 'Name', 'Class', 'House', ...j.judges.map(g => g.name), 'Average']];
+      j.entries.forEach(row => aoa.push([row.rank ?? '', row.chest, row.name, row.cls, row.house,
+        ...j.judges.map(g => row.absent ? 'Absent' : (row.perJudge[g.email] ?? '')), row.absent ? 'Absent' : (row.avg ?? '')]));
+      if (!j.entries.length) aoa.push(['No participants entered.']);
+      aoa.push([], ['Declared result']);
+      const places = [['1st','p1','c1'], ['2nd','p2','c2'], ['3rd','p3','c3'], ['Runner-up','p4','c4']].filter(x => r[x[1]]);
+      if (places.length) places.forEach(x => aoa.push([x[0], r[x[1]], r[x[2]] || ''])); else aoa.push(['Not declared yet']);
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{ wch:7 }, { wch:10 }, { wch:28 }, { wch:20 }, { wch:12 }, ...j.judges.map(() => ({ wch:16 })), { wch:10 }];
+      XLSX.utils.book_append_sheet(wb, ws, sheetName(e.name));
+    });
+    XLSX.writeFile(wb, 'Pratibha_All_Score_Sheets.xlsx');
+    toast(fails.length ? 'Downloaded, but these events could not be read: ' + fails.join(', ') : 'All score sheets downloaded', !!fails.length);
+  } catch(err){ toast(err.message, true); }
+  if (btn){ btn.disabled = false; btn.textContent = label; }
 }
 async function exportXlsx(){
   try { await loadXlsx(); } catch(e){ return toast(e.message, true); }
