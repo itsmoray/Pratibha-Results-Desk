@@ -973,7 +973,8 @@ async function setTab(k){
     const canX = role() === 'admin' || role() === 'viewer' || role() === 'master';
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search declared results" oninput="S.q=this.value;paint()">
       ${canX ? '<button class="btn gold" onclick="exportXlsx()">Download Excel</button>' : ''}
-      ${(role() === 'admin' || role() === 'master') ? '<button class="btn ghost" id="allSheetsBtn" onclick="exportAllScoreSheets()">Download all score sheets</button>' : ''}</div><div id="list" class="list"></div><p class="waiting" id="waiting"></p>`;
+      ${(role() === 'admin' || role() === 'master') ? '<button class="btn ghost" id="allSheetsBtn" onclick="exportAllScoreSheets()">Download all score sheets</button>' : ''}
+      ${(role() === 'admin' || role() === 'master') ? '<button class="btn ghost" id="finalReportBtn" onclick="exportFinalReport()">Download final report</button>' : ''}</div><div id="list" class="list"></div><p class="waiting" id="waiting"></p>`;
   } else if (k === 'certs'){
     v.innerHTML = `<div class="controls"><input id="q" type="search" placeholder="Search event or winner" oninput="S.q=this.value;paint()">
       <div class="chips">${['all','on','off'].map(f => `<button class="chip" data-sf="${f}" aria-pressed="${f==='all'}" onclick="setStage('${f}')">${{all:'All stages',on:'On-stage',off:'Off-stage'}[f]}</button>`).join('')}</div>
@@ -2324,6 +2325,146 @@ async function exportXlsx(){
   const champRows = [['F', CT.F || 'Girls'], ['M', CT.M || 'Boys'], ['U', 'Gender not set']].flatMap(([k, t]) => (CH[k] || []).map((c, i) => ({ 'Title':t, 'Rank':i+1, 'Chest':c.chest, 'Name':c.name, 'Class':c.cls, 'House':c.house, 'Points':c.points, '1st places':c.firsts })));
   if (champRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(champRows), 'Individual Championship');
   XLSX.writeFile(wb, 'Pratibha_Results.xlsx');
+}
+
+/* Final report (admin/master): one styled Excel file. Sheet 1 has a table per declared event with its 1st / 2nd / 3rd
+   winners (chest, name, course, house); sheet 2 has the Kalathilakam and Kalaprathibha tables. Read-only: it only
+   uses data the page already has, nothing is changed or saved. */
+async function exportFinalReport(){
+  const btn = $('#finalReportBtn'), label = btn ? btn.textContent : '';
+  if (btn){ btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try {
+    if (!S.loaded) throw new Error('Results are still loading. Try again in a moment.');
+    const evs = S.events.filter(e => isDone(e.id));
+    if (!evs.length) throw new Error('No declared results yet');
+    await loadExcelJs();
+    const MAROON = '6B1226', MAROON2 = '3F0A18', GOLD = 'D9A441', GOLD_SOFT = 'F3D58A', CREAM = 'FBF6F1', INK = '2E1510';
+    const fill = c => ({ type:'pattern', pattern:'solid', fgColor:{ argb:'FF' + c } });
+    const side = { style:'thin', color:{ argb:'FFD9C9B8' } }, box = { top:side, left:side, bottom:side, right:side };
+    const lum = c => (parseInt(c.slice(0, 2), 16) * 299 + parseInt(c.slice(2, 4), 16) * 587 + parseInt(c.slice(4, 6), 16) * 114) / 1000;
+    const HEAD = 'Georgia';
+    const wb = new ExcelJS.Workbook(); wb.creator = 'Pratibha Results Desk'; wb.created = new Date();
+    const when = new Date().toLocaleDateString([], { day:'numeric', month:'long', year:'numeric' });
+    const newSheet = (name, tab) => wb.addWorksheet(name, { properties:{ tabColor:{ argb:'FF' + tab } }, views:[{ showGridLines:false }],
+      pageSetup:{ orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:0, paperSize:9, horizontalCentered:true, margins:{ left:.4, right:.4, top:.5, bottom:.5, header:.3, footer:.3 } } });
+    const cell = (ws, r, c) => ws.getCell(r, c);
+    // a merged, filled full-width line
+    const band = (ws, n, text, o) => {
+      const r = ws.addRow([text]); ws.mergeCells(r.number, 1, r.number, n); r.height = o.h || 24;
+      const c = cell(ws, r.number, 1); c.fill = fill(o.bg);
+      c.font = { name:o.font || 'Calibri', bold:o.bold !== false, italic:!!o.italic, size:o.size || 11, color:{ argb:'FF' + o.fg } };
+      c.alignment = { vertical:'middle', horizontal:o.align || 'left', indent:o.indent === undefined ? 1 : o.indent, wrapText:true };
+      return r;
+    };
+    const spacer = (ws, h) => { const r = ws.addRow([]); r.height = h || 12; };
+    const banner = (ws, n, sub) => {
+      band(ws, n, 'PRATIBHA 2026 – 27', { bg:MAROON, fg:'FFFFFF', size:22, h:40, font:HEAD, align:'center' });
+      band(ws, n, 'Rhythm of Sapta Swaras  ·  ' + sub, { bg:MAROON2, fg:GOLD_SOFT, size:12, h:24, align:'center', italic:true, bold:false });
+      band(ws, n, '', { bg:GOLD, fg:INK, h:4 });
+      band(ws, n, 'Generated on ' + when, { bg:CREAM, fg:'6B6B6B', size:10, h:20, align:'right', bold:false, italic:true });
+      spacer(ws, 10);
+    };
+    const headRow = (ws, labels) => {
+      const r = ws.addRow(labels); r.height = 24;
+      r.eachCell(c => { c.fill = fill(MAROON2); c.font = { bold:true, color:{ argb:'FFFFFFFF' } }; c.alignment = { horizontal:'center', vertical:'middle', wrapText:true }; c.border = box; });
+      return r;
+    };
+    const houseStyle = (c, h) => {
+      const col = SWARA[h] && SWARA[h][1].slice(1);
+      if (col){ c.fill = fill(col); c.font = { bold:true, color:{ argb: lum(col) > 150 ? 'FF' + INK : 'FFFFFFFF' } }; }
+    };
+
+    // Winners of one place of one event: one entry per student (a tie gives two). Course and house come from the roster.
+    const winnersAt = (r, n) => {
+      const chests = String(r['x' + n] || '').split(',').map(c => c.trim()).filter(Boolean);
+      const names = String(r['p' + n] || '').split(' & '), cls = String(r['c' + n] || '').split(' & ');
+      if (chests.length){
+        const same = names.length === chests.length;
+        return chests.map((c, i) => {
+          const s = studentBy(c), course = s ? s.cls : (cls.length === chests.length ? cls[i] : r['c' + n]) || '';
+          return { chest:c, name: s ? s.name : (same ? names[i] : r['p' + n]), course:course, house:(s && s.house) || houseForClass(course) };
+        });
+      }
+      if (!r['p' + n]) return [];
+      const course = r['c' + n] || '';
+      return [{ chest:'', name:r['p' + n], course:course, house:houseForClass(course) }];   // result entered by hand without chest numbers
+    };
+
+    /* ---- Sheet 1: one table per declared event ---- */
+    const ws = newSheet('Event Results', MAROON);
+    const N1 = 5;
+    banner(ws, N1, 'Final Results');
+    band(ws, N1, evs.length + ' of ' + S.events.length + ' events declared  ·  winners of every event with their course and house', { bg:'FFFFFF', fg:'6B6B6B', size:10, h:20, bold:false, italic:true, align:'center' });
+    spacer(ws, 8);
+    const order = ['On-Stage Individual', 'On-Stage Group', 'Off-Stage', 'Off-Stage Group'];
+    const cats = [...new Set(evs.map(e => e.category || 'Other'))].sort((a, b) => { const x = order.indexOf(a), y = order.indexOf(b); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y) || a.localeCompare(b); });
+    const MED = [{ lab:'1st', pl:'F3D58A', bg:'FBE9B7' }, { lab:'2nd', pl:'D5DAE3', bg:'EEF0F5' }, { lab:'3rd', pl:'E3BE98', bg:'F6E8DA' }];
+    cats.forEach(cat => {
+      band(ws, N1, cat.toUpperCase(), { bg:GOLD, fg:INK, size:13, h:28, font:HEAD });
+      spacer(ws, 8);
+      evs.filter(e => (e.category || 'Other') === cat).forEach(e => {
+        const r = S.results[e.id] || {};
+        const t = ws.addRow([e.name, '', '', e.venue || '', '']); t.height = 26;
+        ws.mergeCells(t.number, 1, t.number, 3); ws.mergeCells(t.number, 4, t.number, 5);
+        const a = cell(ws, t.number, 1), b = cell(ws, t.number, 4);
+        a.fill = fill(MAROON); a.font = { name:HEAD, bold:true, size:13, color:{ argb:'FFFFFFFF' } }; a.alignment = { vertical:'middle', indent:1, wrapText:true };
+        b.fill = fill(MAROON); b.font = { italic:true, size:10, color:{ argb:'FF' + GOLD_SOFT } }; b.alignment = { vertical:'middle', horizontal:'right', indent:1 };
+        headRow(ws, ['Place', 'Chest', 'Name', 'Course', 'House']);
+        MED.forEach((m, i) => {
+          const w = winnersAt(r, i + 1); if (!w.length) return;
+          const first = ws.rowCount + 1;
+          w.forEach(x => {
+            const row = ws.addRow([m.lab, x.chest || '–', x.name, x.course || '–', x.house || '–']); row.height = 22;
+            row.eachCell({ includeEmpty:true }, (c, col) => {
+              c.fill = fill(col === 1 ? m.pl : m.bg); c.border = box;
+              c.alignment = { vertical:'middle', horizontal: col === 3 || col === 4 ? 'left' : 'center', indent: col === 3 || col === 4 ? 1 : 0, wrapText:true };
+              if (col === 1) c.font = { bold:true, size:12, color:{ argb:'FF' + INK } }; else if (col === 3) c.font = { bold:true };
+            });
+            houseStyle(row.getCell(5), x.house);
+          });
+          if (w.length > 1) ws.mergeCells(first, 1, first + w.length - 1, 1);
+        });
+        spacer(ws, 16);
+      });
+    });
+    ws.columns = [{ width:12 }, { width:11 }, { width:34 }, { width:32 }, { width:18 }];
+
+    /* ---- Sheet 2: Kalathilakam & Kalaprathibha ---- */
+    const cs = newSheet('Championships', GOLD);
+    const N2 = 7, C = S.champs || {}, T = C.titles || {};
+    banner(cs, N2, 'Individual Championships');
+    band(cs, N2, 'Individual events only, group items are not counted  ·  ties go to the most 1st places', { bg:'FFFFFF', fg:'6B6B6B', size:10, h:20, bold:false, italic:true, align:'center' });
+    spacer(cs, 8);
+    [[T.F || 'Kalathilakam', C.F], [T.M || 'Kalaprathibha', C.M]].forEach(([title, list]) => {
+      list = list || [];
+      band(cs, N2, String(title).toUpperCase(), { bg:MAROON, fg:'FFFFFF', size:15, h:32, font:HEAD });
+      if (list.length) band(cs, N2, 'Champion:  ' + list[0].name + '  ·  ' + [list[0].cls, list[0].house].filter(Boolean).join(', ') + '  ·  ' + list[0].points + ' points', { bg:GOLD_SOFT, fg:INK, size:12, h:28 });
+      headRow(cs, ['Rank', 'Chest', 'Name', 'Course', 'House', 'Total Points', '1st Places']);
+      if (!list.length){
+        const r = cs.addRow(['No points yet. They appear once results are declared with chest numbers.']); cs.mergeCells(r.number, 1, r.number, N2); r.height = 24;
+        const c = cell(cs, r.number, 1); c.font = { italic:true, color:{ argb:'FF8A8A8A' } }; c.alignment = { vertical:'middle', horizontal:'center' }; c.border = box;
+      }
+      list.forEach((c, i) => {
+        const row = cs.addRow([i + 1, c.chest, c.name, c.cls || '–', c.house || '–', c.points, c.firsts || 0]); row.height = 22;
+        row.eachCell({ includeEmpty:true }, (x, col) => {
+          x.fill = fill(i === 0 ? 'FBE9B7' : (i % 2 ? CREAM : 'FFFFFF')); x.border = box;
+          x.alignment = { vertical:'middle', horizontal: col === 3 || col === 4 ? 'left' : 'center', indent: col === 3 || col === 4 ? 1 : 0, wrapText:true };
+          if (i === 0 || col === 3 || col === 6) x.font = { bold:true };
+        });
+        if (i === 0) row.getCell(1).fill = fill(GOLD_SOFT);
+        houseStyle(row.getCell(5), c.house);
+      });
+      if (title === (T.F || 'Kalathilakam') && C.U && C.U.length) band(cs, N2, C.U.length + ' student(s) with points have no gender set on the roster, so they are in neither title.', { bg:'FFFFFF', fg:'8A5B00', size:10, h:20, bold:false, italic:true });
+      spacer(cs, 20);
+    });
+    cs.columns = [{ width:11 }, { width:11 }, { width:34 }, { width:32 }, { width:18 }, { width:14 }, { width:12 }];
+
+    const buf = await wb.xlsx.writeBuffer();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = 'Pratibha_Final_Report.xlsx'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast('Final report downloaded');
+  } catch(err){ toast(err.message, true); }
+  if (btn){ btn.disabled = false; btn.textContent = label; }
 }
 
 /* ====== BOOT ====== */
